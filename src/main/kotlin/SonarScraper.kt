@@ -1,5 +1,3 @@
-package it.unibz.sonar
-
 import org.json.simple.JSONArray
 import org.json.simple.JSONObject
 import org.json.simple.parser.JSONParser
@@ -29,12 +27,12 @@ import java.net.URL
 // quality_gate_details
 
 
-private val parser = JSONParser()
+val parser = JSONParser()
 private val MAX_URL_LENGTH = 2000
 
 //ignore args for now
 private val projectKey = "org.apache:commons-cli"
-private val sonarInstance = "http://sonar.inf.unibz.it"
+val sonarInstance = "http://sonar.inf.unibz.it"
 
 fun main(args: Array<String>) {
     //val fileOut = projectKey.replace("\\.".toRegex(), "-").replace(":".toRegex(), "-") + ".csv"
@@ -46,9 +44,11 @@ fun main(args: Array<String>) {
         //val usefulMetricKeys = readListFromFile("nonempty_measures.txt")
         //saveMeasureHistory(usefulMetricKeys, "measures.csv")
 
-        saveIssueHistory("issues.csv")
+        //saveIssueHistory("issues.csv")
 
-        mergeMeasuresWithIssues("measures.csv", "issues.csv", "measures-and-issues.csv")
+        //mergeMeasuresWithIssues("measures.csv", "issues.csv", "measures-and-issues.csv")
+
+        saveJiraIssues()
 
     } catch (e: ParseException) {
         println("JSON parsing error")
@@ -236,7 +236,7 @@ private fun mergeMeasuresWithIssues(measuresFile: String, issuesFile: String, co
         val creation_date = line.split(",")[0]
         val update_date = line.split(",")[1]
         val ruleKey = line.split(",")[2]
-        val component = line.split(",")[3]
+        //val component = line.split(",")[3]
         ruleKeys.add(ruleKey)
 
         issuesByDateOpened.computeIfAbsent(creation_date, { _ -> mutableListOf() })
@@ -277,7 +277,7 @@ private fun mergeMeasuresWithIssues(measuresFile: String, issuesFile: String, co
     }
 }
 
-private fun getStringFromUrl(queryURL: String): String {
+fun getStringFromUrl(queryURL: String): String {
     assert(queryURL.length <= MAX_URL_LENGTH) // URLS over 2000 are not supported
     println("\nSending 'GET' request to URL : " + queryURL)
     val url = URL(queryURL)
@@ -315,7 +315,7 @@ private fun readListFromFile(filename: String): List<String> {
     return result
 }
 
-private fun separatedByCommas(list: List<String>): String {
+fun separatedByCommas(list: List<String>): String {
     //System.out.println(Arrays.toString(list.toArray()));
     var result = ""
     var separator = ""
