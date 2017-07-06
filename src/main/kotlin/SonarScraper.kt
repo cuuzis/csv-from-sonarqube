@@ -5,7 +5,7 @@ import org.json.simple.parser.ParseException
 import java.io.*
 import java.net.HttpURLConnection
 import java.net.URL
-
+import java.net.URLEncoder
 
 // 1. get all metrics (281)
 //
@@ -31,7 +31,7 @@ val parser = JSONParser()
 private val MAX_URL_LENGTH = 2000
 
 //ignore args for now
-private val projectKey = "org.apache:commons-cli"
+//private val projectKey = "org.apache:commons-cli"
 val sonarInstance = "http://sonar.inf.unibz.it"
 
 fun main(args: Array<String>) {
@@ -39,7 +39,15 @@ fun main(args: Array<String>) {
 
 
     try {
-        //saveNonemptyMeasures("nonempty_measures.txt")
+        val metricKeys = getMetricKeys()
+        val projectKeys = getProjectsContainingString("QC - a")
+        println("projects: ${projectKeys.size}")
+        saveCurrentMeasures("current-measures.csv", projectKeys, metricKeys)
+
+
+
+
+        //saveNonemptyPastMeasures("nonempty-past-measures.txt", metricKeys.toMutableList())
 
         //val usefulMetricKeys = readListFromFile("nonempty_measures.txt")
         //saveMeasureHistory(usefulMetricKeys, "measures.csv")
@@ -48,7 +56,9 @@ fun main(args: Array<String>) {
 
         //mergeMeasuresWithIssues("measures.csv", "issues.csv", "measures-and-issues.csv")
 
-        saveJiraIssues()
+        //saveJiraIssues("jira-issues.csv")
+
+        //saveGitCommits()
 
     } catch (e: ParseException) {
         println("JSON parsing error")
@@ -56,12 +66,76 @@ fun main(args: Array<String>) {
     }
 }
 
+/*
+Returns a list of project keys containing a string
+ */
+fun  getProjectsContainingString(partOfName: String): List<String> {
+    val query = "http://sonar.inf.unibz.it/api/components/search" +
+            "?qualifiers=TRK" +
+            "&ps=1000" +
+            "&q=${URLEncoder.encode(partOfName, "UTF-8")}"
+    val response = getStringFromUrl(query)
+    val mainObject = parser.parse(response) as JSONObject
+    val componentArray = mainObject["components"] as JSONArray
+    return componentArray.filterIsInstance<JSONObject>().map { it["key"].toString() }
+}
 
-private fun saveNonemptyMeasures(fileName: String) {
-    val metricKeys = getMetricKeys()
+/*
+Saves in a .csv file all of the current measures for given projects
+ */
+private fun saveCurrentMeasures(fileName: String, projectKeys: List<String>, metricKeys: List<String>) {
+    val measureKeys = mutableSetOf<String>()
+    val allProjectMeasures = mutableListOf<Map<String,String>>()
+    for (projectKey in projectKeys) {
+        val measureValues = mutableMapOf<String, String>()
+        val metricKeysLeft = metricKeys.toMutableList()
+        measureKeys.add("_project")
+        measureValues.put("_project", projectKey)
+        val measureQuery = "$sonarInstance/api/measures/component" +
+                "?componentKey=$projectKey" +
+                "&metricKeys="
+        while (!metricKeysLeft.isEmpty()) {
+            var query = measureQuery
+            while (!metricKeysLeft.isEmpty() && (query.length + metricKeysLeft.first().length < MAX_URL_LENGTH)) {
+                if (query == measureQuery)
+                    query += metricKeysLeft.removeAt(0)
+                else
+                    query += "," + metricKeysLeft.removeAt(0)
+            }
+            val measureResult = getStringFromUrl(query)
+            val mainObject = parser.parse(measureResult) as JSONObject
+            val componentObject = mainObject["component"] as JSONObject
+            val measureArray = componentObject["measures"] as JSONArray
+            for (metricObject in measureArray.filterIsInstance<JSONObject>()) {
+                val measureKey = metricObject["metric"].toString()
+                val measureValue = metricObject["value"].toString().replace(",", ";")
+                measureKeys.add(measureKey)
+                measureValues.put(measureKey, measureValue)
+            }
+        }
+        allProjectMeasures.add(measureValues)
+    }
+    BufferedWriter(FileWriter(fileName)).use { bw ->
+        val sortedMeasureKeys = measureKeys.toSortedSet()
+        bw.write(separatedByCommas(sortedMeasureKeys.toList()))
+        bw.newLine()
+        for (measureValues in allProjectMeasures) {
+            val valueRow = sortedMeasureKeys.map { measureValues[it] ?: "null" }
+            bw.write(separatedByCommas(valueRow))
+            bw.newLine()
+        }
+    }
+}
+
+
+/*
+Tests which past measures contain nonempty values for a given project.
+Stores the result in file.
+ */
+private fun saveNonemptyPastMeasures(fileName: String, projectKey: String, metricKeys: MutableList<String>) {
     val usefulMeasures = mutableListOf<String>()
     val measureQuery = "$sonarInstance/api/measures/search_history" +
-            "?component=" + projectKey +
+            "?component=$projectKey" +
             "&metrics="
     while (!metricKeys.isEmpty()) {
         var query = measureQuery
@@ -99,7 +173,7 @@ private fun saveNonemptyMeasures(fileName: String) {
             }
         }
     }
-    println("Nonempty measures: ${usefulMeasures.size}")
+    println("Nonempty past measures: ${usefulMeasures.size}")
 
     BufferedWriter(FileWriter(fileName)).use { bw ->
         for (key in usefulMeasures) {
@@ -109,7 +183,10 @@ private fun saveNonemptyMeasures(fileName: String) {
     }
 }
 
-private fun getMetricKeys(): MutableList<String> {
+/*
+Returns all metrics available on the server
+ */
+private fun getMetricKeys(): List<String> {
     val metricsQuery = "$sonarInstance/api/metrics/search?ps=1000"
     val metricsResult = getStringFromUrl(metricsQuery)
     val metricsObject = parser.parse(metricsResult) as JSONObject
@@ -125,7 +202,10 @@ private fun getMetricKeys(): MutableList<String> {
     return metricsKeys
 }
 
-private fun saveMeasureHistory(metricKeys: List<String>, fileName: String) {
+/*
+Saves past measures measures for a project in a .csv file
+ */
+private fun saveMeasureHistory(fileName: String, projectKey: String, metricKeys: MutableList<String>) {
     val measureQuery = "$sonarInstance/api/measures/search_history" +
             "?component=" + projectKey +
             "&ps=1000" +
@@ -164,7 +244,10 @@ private fun saveMeasureHistory(metricKeys: List<String>, fileName: String) {
     }
 }
 
-private fun saveIssueHistory(fileName: String) {
+/*
+Saves issue history for a project in a .csv file
+ */
+private fun saveIssueHistory(fileName: String, projectKey: String) {
     BufferedWriter(FileWriter(fileName)).use { bw ->
         val header = "creation_date,update_date,rule,component"
         //println(header)
@@ -226,6 +309,9 @@ private fun saveIssueHistory(fileName: String) {
     }
 }
 
+/*
+Merges the list of issues with the measure history, by grouping issues to the date
+ */
 private fun mergeMeasuresWithIssues(measuresFile: String, issuesFile: String, combinedFile: String) {
     val ruleKeys = mutableSetOf<String>()
     val issuesByDateOpened = mutableMapOf<String, MutableList<String>>()
@@ -277,6 +363,9 @@ private fun mergeMeasuresWithIssues(measuresFile: String, issuesFile: String, co
     }
 }
 
+/*
+Parses an URL request as a string
+ */
 fun getStringFromUrl(queryURL: String): String {
     assert(queryURL.length <= MAX_URL_LENGTH) // URLS over 2000 are not supported
     println("\nSending 'GET' request to URL : " + queryURL)
@@ -298,6 +387,9 @@ fun getStringFromUrl(queryURL: String): String {
     return stringBuilder.toString()
 }
 
+/*
+Reads each line from file into a string list
+ */
 private fun readListFromFile(filename: String): List<String> {
     val result = mutableListOf<String>()
     val file = File(filename)
@@ -316,12 +408,5 @@ private fun readListFromFile(filename: String): List<String> {
 }
 
 fun separatedByCommas(list: List<String>): String {
-    //System.out.println(Arrays.toString(list.toArray()));
-    var result = ""
-    var separator = ""
-    for (elem in list) {
-        result += separator + elem
-        separator = ","
-    }
-    return result
+    return list.joinToString(",")
 }
