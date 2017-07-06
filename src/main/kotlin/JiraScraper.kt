@@ -7,20 +7,19 @@ import java.io.FileWriter
 Saves all issues for a given project:
 issueKey, openDate, closeDate
  */
-fun saveJiraIssues() {
-    val fileName = "jira-issues.csv"
+fun saveJiraIssues(fileName: String) {
     val projectKey = "CLI"
 
     BufferedWriter(FileWriter(fileName)).use { bw ->
-        val header = "key,creation_date,resolution_date,priority"
+        val header = "key,creation-date,resolution-date,resolution,type,priority"
         bw.write(header)
         bw.newLine()
 
         var startAt = 0
         do {
-            val issueQuery = "https://issues.apache.org/jira/rest/api/2/search?jql=" +
-                    "project=$projectKey" +
-                    "&fields=created,resolutiondate,priority" + //assignee,creator,reporter,priority.name
+            val issueQuery = "https://issues.apache.org/jira/rest/api/2/search" +
+                    "?jql=project=$projectKey AND status in (Resolved,Closed)".replace(" ", "%20") +
+                    "&fields=created,resolutiondate,resolution,issuetype,priority" + //assignee,creator,reporter,priority.name
                     "&startAt=$startAt"
             val jiraResult = getStringFromUrl(issueQuery)
 
@@ -34,10 +33,17 @@ fun saveJiraIssues() {
                 val fieldsObject = issueObject["fields"] as JSONObject
                 val creationDate = fieldsObject["created"].toString()
                 val resolutionDate = fieldsObject["resolutiondate"].toString()
+
+                val resolutionObject = fieldsObject["resolution"] as JSONObject
+                val resolution = resolutionObject["name"].toString()
+
+                val typeObject = fieldsObject["issuetype"] as JSONObject
+                val type = typeObject["name"].toString()
+
                 val priorityObject = fieldsObject["priority"] as JSONObject
                 val priority = priorityObject["name"].toString()
 
-                val row = mutableListOf<String>(key, creationDate, resolutionDate, priority)
+                val row = mutableListOf<String>(key, creationDate, resolutionDate, resolution, type, priority)
                 bw.write(separatedByCommas(row))
                 bw.newLine()
             }
