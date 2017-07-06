@@ -40,11 +40,10 @@ fun main(args: Array<String>) {
 
     try {
         val metricKeys = getMetricKeys()
-        val projectKeys = getProjectsContainingString("QC - a")
+        val projectKeys = getProjectsContainingString("QC - col")
         println("projects: ${projectKeys.size}")
         saveCurrentMeasures("current-measures.csv", projectKeys, metricKeys)
-
-
+        //saveIssues("current-issues.csv", projectKeys[0], "OPEN")
 
 
         //saveNonemptyPastMeasures("nonempty-past-measures.txt", metricKeys.toMutableList())
@@ -52,7 +51,8 @@ fun main(args: Array<String>) {
         //val usefulMetricKeys = readListFromFile("nonempty_measures.txt")
         //saveMeasureHistory(usefulMetricKeys, "measures.csv")
 
-        //saveIssueHistory("issues.csv")
+
+        //saveIssues("issues.csv", projectKeys[0], "CLOSED,OPEN")
 
         //mergeMeasuresWithIssues("measures.csv", "issues.csv", "measures-and-issues.csv")
 
@@ -85,8 +85,11 @@ Saves in a .csv file all of the current measures for given projects
  */
 private fun saveCurrentMeasures(fileName: String, projectKeys: List<String>, metricKeys: List<String>) {
     val measureKeys = mutableSetOf<String>()
+    val issueKeys = mutableSetOf<String>()
     val allProjectMeasures = mutableListOf<Map<String,String>>()
+    val allProjectIssues = mutableListOf<Map<String,Int>>()
     for (projectKey in projectKeys) {
+        //get measures
         val measureValues = mutableMapOf<String, String>()
         val metricKeysLeft = metricKeys.toMutableList()
         measureKeys.add("_project")
@@ -114,14 +117,35 @@ private fun saveCurrentMeasures(fileName: String, projectKeys: List<String>, met
             }
         }
         allProjectMeasures.add(measureValues)
+
+        //get issues
+        saveIssues("current-issues.csv", projectKey, "OPEN")
+
+        val issueCount = mutableMapOf<String, Int>()
+        val issueCSV = readListFromFile("current-issues.csv")
+        for (line in issueCSV.subList(1, issueCSV.size)) {
+            val ruleKey = line.split(",")[2]
+            issueKeys.add(ruleKey)
+            val previousCount = issueCount.getOrDefault(ruleKey, 0)
+            issueCount[ruleKey] = previousCount + 1
+        }
+        allProjectIssues.add(issueCount)
     }
     BufferedWriter(FileWriter(fileName)).use { bw ->
         val sortedMeasureKeys = measureKeys.toSortedSet()
-        bw.write(separatedByCommas(sortedMeasureKeys.toList()))
+        val sortedIssueKeys = issueKeys.toSortedSet()
+        bw.write(sortedMeasureKeys.joinToString(","))
+        bw.write(",")
+        bw.write(sortedIssueKeys.joinToString(","))
         bw.newLine()
-        for (measureValues in allProjectMeasures) {
-            val valueRow = sortedMeasureKeys.map { measureValues[it] ?: "null" }
-            bw.write(separatedByCommas(valueRow))
+        for ((idx, measureValues) in allProjectMeasures.withIndex()) {
+            val issueValues = allProjectIssues[idx]
+
+            val rowMeasures = sortedMeasureKeys.map { measureValues[it] ?: "null" }
+            val rowIssues = sortedIssueKeys.map { issueValues[it] ?: 0 }
+            bw.write(rowMeasures.joinToString(","))
+            bw.write(",")
+            bw.write(rowIssues.joinToString(","))
             bw.newLine()
         }
     }
@@ -247,7 +271,7 @@ private fun saveMeasureHistory(fileName: String, projectKey: String, metricKeys:
 /*
 Saves issue history for a project in a .csv file
  */
-private fun saveIssueHistory(fileName: String, projectKey: String) {
+private fun saveIssues(fileName: String, projectKey: String, statuses: String) {
     BufferedWriter(FileWriter(fileName)).use { bw ->
         val header = "creation_date,update_date,rule,component"
         //println(header)
@@ -263,7 +287,7 @@ private fun saveIssueHistory(fileName: String, projectKey: String) {
                 val issuesQuery = "$sonarInstance/api/issues/search" +
                         "?componentKeys=" + projectKey +
                         "&s=CREATION_DATE" +
-                        "&statuses=CLOSED,OPEN" +
+                        "&statuses=$statuses" +
                         "&createdAfter=${createdAfter.replace("+", "%2B")}" +
                         "&ps=$pageSize" +
                         "&p=$currentPage"
@@ -310,7 +334,7 @@ private fun saveIssueHistory(fileName: String, projectKey: String) {
 }
 
 /*
-Merges the list of issues with the measure history, by grouping issues to the date
+Merges the list of issues with the measure history, grouping issues by date
  */
 private fun mergeMeasuresWithIssues(measuresFile: String, issuesFile: String, combinedFile: String) {
     val ruleKeys = mutableSetOf<String>()
@@ -318,7 +342,7 @@ private fun mergeMeasuresWithIssues(measuresFile: String, issuesFile: String, co
     val issuesByDateClosed = mutableMapOf<String, MutableList<String>>()
 
     val issueCSV = readListFromFile(issuesFile)
-    for (line in issueCSV.subList(1, issueCSV.lastIndex)) {
+    for (line in issueCSV.subList(1, issueCSV.size)) {
         val creation_date = line.split(",")[0]
         val update_date = line.split(",")[1]
         val ruleKey = line.split(",")[2]
@@ -345,7 +369,7 @@ private fun mergeMeasuresWithIssues(measuresFile: String, issuesFile: String, co
             currentIssueCount[ruleKey] = "0"
         }
 
-        for (line in measureCSV.subList(1, measureCSV.lastIndex)) {
+        for (line in measureCSV.subList(1, measureCSV.size)) {
             val measureDate = line.split(",")[0]
             val openedIssues = issuesByDateOpened.getOrDefault(measureDate, mutableListOf())
             for (ruleKey in openedIssues) {
