@@ -4,11 +4,9 @@ import java.io.BufferedWriter
 import java.io.FileWriter
 
 /*
-Saves all issues for a given project:
-issueKey, openDate, closeDate
+Saves all issues for a given project
  */
-fun saveJiraIssues(fileName: String) {
-    val projectKey = "CLI"
+fun saveJiraIssues(fileName: String, projectKey: String) {
 
     BufferedWriter(FileWriter(fileName)).use { bw ->
         val header = "key,creation-date,resolution-date,resolution,type,priority"
@@ -44,7 +42,7 @@ fun saveJiraIssues(fileName: String) {
                 val priority = priorityObject["name"].toString()
 
                 val row = mutableListOf<String>(key, creationDate, resolutionDate, resolution, type, priority)
-                bw.write(separatedByCommas(row))
+                bw.write(row.joinToString(","))
                 bw.newLine()
             }
             startAt += maxResults

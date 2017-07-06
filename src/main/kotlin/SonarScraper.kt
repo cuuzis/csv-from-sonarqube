@@ -28,35 +28,29 @@ import java.net.URLEncoder
 
 
 val parser = JSONParser()
-private val MAX_URL_LENGTH = 2000
-
-//ignore args for now
-//private val projectKey = "org.apache:commons-cli"
 val sonarInstance = "http://sonar.inf.unibz.it"
 
-fun main(args: Array<String>) {
-    //val fileOut = projectKey.replace("\\.".toRegex(), "-").replace(":".toRegex(), "-") + ".csv"
+private val MAX_URL_LENGTH = 2000
 
+fun main(args: Array<String>) {
 
     try {
+        //export QC projects
         val metricKeys = getMetricKeys()
-        val projectKeys = getProjectsContainingString("QC - col")
+        val projectKeys = getProjectsContainingString("QC - col")//QC - aspectj, QC - jboss, QC - jtopen
         println("projects: ${projectKeys.size}")
-        saveCurrentMeasures("current-measures.csv", projectKeys, metricKeys)
-        //saveIssues("current-issues.csv", projectKeys[0], "OPEN")
+        saveCurrentMeasuresAndIssues("current-measures-and-issues.csv", projectKeys, metricKeys)
 
 
-        //saveNonemptyPastMeasures("nonempty-past-measures.txt", metricKeys.toMutableList())
+        //export "org.apache:commons-cli"
+        val projectKey = "org.apache:commons-cli"
+        saveNonemptyPastMeasures("nonempty-past-measures.txt", projectKey, metricKeys)
+        val usefulMetricKeys = readListFromFile("nonempty-past-measures.txt")
+        saveMeasureHistory("measures.csv", projectKey, usefulMetricKeys)
+        saveIssues("issues.csv", projectKey, "CLOSED,OPEN")
+        mergeMeasuresWithIssues("measures.csv", "issues.csv", "measures-and-issues.csv")
 
-        //val usefulMetricKeys = readListFromFile("nonempty_measures.txt")
-        //saveMeasureHistory(usefulMetricKeys, "measures.csv")
-
-
-        //saveIssues("issues.csv", projectKeys[0], "CLOSED,OPEN")
-
-        //mergeMeasuresWithIssues("measures.csv", "issues.csv", "measures-and-issues.csv")
-
-        //saveJiraIssues("jira-issues.csv")
+        saveJiraIssues("jira-issues.csv", "CLI")
 
         //saveGitCommits()
 
@@ -81,9 +75,9 @@ fun  getProjectsContainingString(partOfName: String): List<String> {
 }
 
 /*
-Saves in a .csv file all of the current measures for given projects
+Saves in a .csv file all of the current measures and issues for given projects
  */
-private fun saveCurrentMeasures(fileName: String, projectKeys: List<String>, metricKeys: List<String>) {
+private fun saveCurrentMeasuresAndIssues(fileName: String, projectKeys: List<String>, metricKeys: List<String>) {
     val measureKeys = mutableSetOf<String>()
     val issueKeys = mutableSetOf<String>()
     val allProjectMeasures = mutableListOf<Map<String,String>>()
@@ -132,12 +126,15 @@ private fun saveCurrentMeasures(fileName: String, projectKeys: List<String>, met
         allProjectIssues.add(issueCount)
     }
     BufferedWriter(FileWriter(fileName)).use { bw ->
+        //header
         val sortedMeasureKeys = measureKeys.toSortedSet()
         val sortedIssueKeys = issueKeys.toSortedSet()
         bw.write(sortedMeasureKeys.joinToString(","))
         bw.write(",")
         bw.write(sortedIssueKeys.joinToString(","))
         bw.newLine()
+
+        //rows
         for ((idx, measureValues) in allProjectMeasures.withIndex()) {
             val issueValues = allProjectIssues[idx]
 
@@ -156,18 +153,19 @@ private fun saveCurrentMeasures(fileName: String, projectKeys: List<String>, met
 Tests which past measures contain nonempty values for a given project.
 Stores the result in file.
  */
-private fun saveNonemptyPastMeasures(fileName: String, projectKey: String, metricKeys: MutableList<String>) {
+private fun saveNonemptyPastMeasures(fileName: String, projectKey: String, metricKeys: List<String>) {
     val usefulMeasures = mutableListOf<String>()
     val measureQuery = "$sonarInstance/api/measures/search_history" +
             "?component=$projectKey" +
             "&metrics="
-    while (!metricKeys.isEmpty()) {
+    val metricKeysLeft = metricKeys.toMutableList()
+    while (!metricKeysLeft.isEmpty()) {
         var query = measureQuery
-        while (!metricKeys.isEmpty() && (query.length + metricKeys.first().length < MAX_URL_LENGTH)) {
+        while (!metricKeysLeft.isEmpty() && (query.length + metricKeysLeft.first().length < MAX_URL_LENGTH)) {
             if (query == measureQuery)
-                query += metricKeys.removeAt(0)
+                query += metricKeysLeft.removeAt(0)
             else
-                query += "," + metricKeys.removeAt(0)
+                query += "," + metricKeysLeft.removeAt(0)
         }
         val measureResult = getStringFromUrl(query)
         val measureObject = parser.parse(measureResult) as JSONObject
@@ -218,9 +216,7 @@ private fun getMetricKeys(): List<String> {
     println("Metrics found: $metricsCount")
     val metricsKeys = mutableListOf<String>()
     val metricsArray = metricsObject["metrics"] as JSONArray
-    for (metricObject in metricsArray.filterIsInstance<JSONObject>()) {
-        metricsKeys.add(metricObject["key"].toString())
-    }
+    metricsArray.filterIsInstance<JSONObject>().mapTo(metricsKeys) { it["key"].toString() }
     println(metricsKeys)
     assert(metricsKeys.size == metricsCount)
     return metricsKeys
@@ -229,11 +225,11 @@ private fun getMetricKeys(): List<String> {
 /*
 Saves past measures measures for a project in a .csv file
  */
-private fun saveMeasureHistory(fileName: String, projectKey: String, metricKeys: MutableList<String>) {
+private fun saveMeasureHistory(fileName: String, projectKey: String, metricKeys: List<String>) {
     val measureQuery = "$sonarInstance/api/measures/search_history" +
             "?component=" + projectKey +
             "&ps=1000" +
-            "&metrics=" + separatedByCommas(metricKeys)
+            "&metrics=" + metricKeys.joinToString(",")
 
     val measureResult = getStringFromUrl(measureQuery)
     val measureObject = parser.parse(measureResult) as JSONObject
@@ -259,10 +255,10 @@ private fun saveMeasureHistory(fileName: String, projectKey: String, metricKeys:
     }
     BufferedWriter(FileWriter(fileName)).use { bw ->
         val columns: List<String> = listOf<String>("date") + metricKeys
-        bw.write(separatedByCommas(columns))
+        bw.write(columns.joinToString(","))
         bw.newLine()
         for ((key, values) in measureMap) {
-            bw.write("$key," + separatedByCommas(values.toList()))
+            bw.write(key + "," + values.joinToString(","))
             bw.newLine()
         }
     }
@@ -274,7 +270,6 @@ Saves issue history for a project in a .csv file
 private fun saveIssues(fileName: String, projectKey: String, statuses: String) {
     BufferedWriter(FileWriter(fileName)).use { bw ->
         val header = "creation_date,update_date,rule,component"
-        //println(header)
         bw.write(header)
         bw.newLine()
 
@@ -285,10 +280,10 @@ private fun saveIssues(fileName: String, projectKey: String, statuses: String) {
             var currentPage = 1
             do {
                 val issuesQuery = "$sonarInstance/api/issues/search" +
-                        "?componentKeys=" + projectKey +
+                        "?componentKeys=$projectKey" +
                         "&s=CREATION_DATE" +
                         "&statuses=$statuses" +
-                        "&createdAfter=${createdAfter.replace("+", "%2B")}" +
+                        "&createdAfter=" + URLEncoder.encode(createdAfter, "UTF-8") +
                         "&ps=$pageSize" +
                         "&p=$currentPage"
                 val sonarResult = getStringFromUrl(issuesQuery)
@@ -321,7 +316,7 @@ private fun saveIssues(fileName: String, projectKey: String, statuses: String) {
                         ""
                     val row = mutableListOf<String>(creationDate, closedDate, rule, classname)
 
-                    bw.write(separatedByCommas(row))
+                    bw.write(row.joinToString(","))
                     bw.newLine()
                 }
                 currentPage++
@@ -360,7 +355,7 @@ private fun mergeMeasuresWithIssues(measuresFile: String, issuesFile: String, co
     println("Measure cols: ${measureCSV[0].split(",").size}")
     println("Issue Cols: ${ruleKeys.size}")
     BufferedWriter(FileWriter(combinedFile)).use { bw ->
-        bw.write("${measureCSV[0]},${separatedByCommas(ruleKeys.toList())}")
+        bw.write(measureCSV[0] + "," + ruleKeys.joinToString(","))
         bw.newLine()
 
 
@@ -381,7 +376,7 @@ private fun mergeMeasuresWithIssues(measuresFile: String, issuesFile: String, co
                 currentIssueCount[ruleKey] = (Integer.valueOf(currentIssueCount[ruleKey]!!) - 1).toString()
             }
 
-            bw.write("$line,${separatedByCommas(currentIssueCount.values.toList())}")
+            bw.write(line + "," + currentIssueCount.values.joinToString(","))
             bw.newLine()
         }
     }
@@ -429,8 +424,4 @@ private fun readListFromFile(filename: String): List<String> {
         e.printStackTrace()
     }
     return result
-}
-
-fun separatedByCommas(list: List<String>): String {
-    return list.joinToString(",")
 }
