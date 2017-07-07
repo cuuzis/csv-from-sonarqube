@@ -302,7 +302,23 @@ private fun saveIssueRows(componentKey: String, statuses: String, rows: MutableL
     if (Integer.valueOf(mainObject["total"].toString()) > MAX_ELASTICSEARCH_RESULTS) {
         //get components of component
         //recursion for each component
-        throw Throwable("Not implemented for queries of > 10000")
+        val componentPageSize = 100
+        var page = 1
+        do {
+            val componentQuery = "http://sonar.inf.unibz.it/api/components/tree" +
+                    "?baseComponentKey=" + componentKey +
+                    "&ps=" + componentPageSize +
+                    "&p=" + page
+            val componentResult = getStringFromUrl(componentQuery)
+            val componentObject = parser.parse(componentResult) as JSONObject
+            val componentArray = componentObject["components"] as JSONArray
+            for (component in componentArray.filterIsInstance<JSONObject>()) {
+                val key = component["key"].toString()
+                saveIssueRows(key, statuses, rows)
+            }
+            page++
+        } while (componentArray.size > 0)
+
     } else {
         //take results
         //go to all pages
