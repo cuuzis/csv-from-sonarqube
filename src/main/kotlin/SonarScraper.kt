@@ -31,6 +31,7 @@ val parser = JSONParser()
 val sonarInstance = "http://sonar.inf.unibz.it"
 
 private val MAX_URL_LENGTH = 2000
+private val MAX_ELASTICSEARCH_RESULTS = 10000
 
 fun main(args: Array<String>) {
 
@@ -43,6 +44,7 @@ fun main(args: Array<String>) {
 
 
         //export "org.apache:commons-cli"
+        /*
         val projectKey = "org.apache:commons-cli"
         saveNonemptyPastMeasures("nonempty-past-measures.txt", projectKey, metricKeys)
         val usefulMetricKeys = readListFromFile("nonempty-past-measures.txt")
@@ -51,7 +53,7 @@ fun main(args: Array<String>) {
         mergeMeasuresWithIssues("measures.csv", "issues.csv", "measures-and-issues.csv")
 
         saveJiraIssues("jira-issues.csv", "CLI")
-
+        */
         //saveGitCommits()
 
     } catch (e: ParseException) {
@@ -267,65 +269,78 @@ private fun saveMeasureHistory(fileName: String, projectKey: String, metricKeys:
 /*
 Saves issue history for a project in a .csv file
  */
+// TODO: split by subdirectories until none has more than 10 000 issues, then combine results
+//http://sonar.inf.unibz.it/api/components/tree?baseComponentKey=org.apache:commons-cli
+//http://sonar.inf.unibz.it/api/issues/search?componentKeys=org.apache:commons-cli:src/main/java/org/apache/commons/cli&statuses=OPEN
+//http://sonar.inf.unibz.it/component_issues?id=org.apache%3Acommons-cli#resolved=false|directories=src%2Fmain%2Fjava%2Forg%2Fapache%2Fcommons%2Fcli
 private fun saveIssues(fileName: String, projectKey: String, statuses: String) {
     BufferedWriter(FileWriter(fileName)).use { bw ->
         val header = "creation_date,update_date,rule,component"
         bw.write(header)
         bw.newLine()
-
-        var createdAfter = "1900-01-01T01:01:01+0100"
-        val pageSize = 500
-        do {
-            var issuesArraySize: Int
-            var currentPage = 1
-            do {
-                val issuesQuery = "$sonarInstance/api/issues/search" +
-                        "?componentKeys=$projectKey" +
-                        "&s=CREATION_DATE" +
-                        "&statuses=$statuses" +
-                        "&createdAfter=" + URLEncoder.encode(createdAfter, "UTF-8") +
-                        "&ps=$pageSize" +
-                        "&p=$currentPage"
-                val sonarResult = getStringFromUrl(issuesQuery)
-                val mainObject = parser.parse(sonarResult) as JSONObject
-
-                val issuesArray = mainObject["issues"] as JSONArray
-                issuesArraySize = issuesArray.size
-
-                if (issuesArraySize == 0)
-                    break
-
-                val firstDateInArray = (issuesArray.first() as JSONObject)["creationDate"].toString()
-                val lastDateInArray = (issuesArray.last() as JSONObject)["creationDate"].toString()
-
-                for (issueObject in issuesArray.filterIsInstance<JSONObject>()) {
-                    val creationDate = issueObject["creationDate"].toString()
-                    val updateDate = issueObject["updateDate"].toString()
-                    val rule = issueObject["rule"].toString()
-                    val component = issueObject["component"].toString()
-                    val classname = component.replaceFirst((projectKey + ":").toRegex(), "")
-                    val status = issueObject["status"].toString()
-
-                    createdAfter = creationDate
-                    if (creationDate == lastDateInArray && firstDateInArray != lastDateInArray)
-                        break
-
-                    val closedDate = if (status == "CLOSED")
-                        updateDate
-                    else
-                        ""
-                    val row = mutableListOf<String>(creationDate, closedDate, rule, classname)
-
-                    bw.write(row.joinToString(","))
-                    bw.newLine()
-                }
-                currentPage++
-
-            } while (firstDateInArray == lastDateInArray && issuesArraySize > 0)
-
-        } while (issuesArraySize > 0)
-        println("Data saved to $fileName")
+        val rows = mutableListOf<String>()
+        saveIssueRows(projectKey, statuses, rows)
+        rows.map {
+            bw.write(it)
+            bw.newLine()
+        }
+        println("Issues saved to $fileName")
     }
+}
+
+private fun saveIssueRows(componentKey: String, statuses: String, rows: MutableList<String>): MutableList<String> {
+    val pageSize = 500
+    var currentPage = 1
+    val issuesQuery = "$sonarInstance/api/issues/search" +
+            "?componentKeys=$componentKey" +
+            "&s=CREATION_DATE" +
+            "&statuses=$statuses" +
+            "&ps=$pageSize" +
+            "&p=$currentPage"
+    val sonarResult = getStringFromUrl(issuesQuery)
+    var mainObject = parser.parse(sonarResult) as JSONObject
+    if (Integer.valueOf(mainObject["total"].toString()) > MAX_ELASTICSEARCH_RESULTS) {
+        //get components of component
+        //recursion for each component
+        throw Throwable("Not implemented for queries of > 10000")
+    } else {
+        //take results
+        //go to all pages
+        var issuesArray = mainObject["issues"] as JSONArray
+        var issuesArraySize = issuesArray.size
+        while (issuesArraySize > 0) {
+            // save row data
+            for (issueObject in issuesArray.filterIsInstance<JSONObject>()) {
+                val creationDate = issueObject["creationDate"].toString()
+                val updateDate = issueObject["updateDate"].toString()
+                val rule = issueObject["rule"].toString()
+                val component = issueObject["component"].toString()
+                //val classname = component.replaceFirst((projectKey + ":").toRegex(), "")
+                val classname = component
+                val status = issueObject["status"].toString()
+
+                val closedDate = if (status == "CLOSED")
+                    updateDate
+                else
+                    ""
+                val rowItems = mutableListOf<String>(creationDate, closedDate, rule, classname)
+                rows.add(rowItems.joinToString(","))
+            }
+            // get next page
+            currentPage++
+            val query = "$sonarInstance/api/issues/search" +
+                    "?componentKeys=$componentKey" +
+                    "&s=CREATION_DATE" +
+                    "&statuses=$statuses" +
+                    "&ps=$pageSize" +
+                    "&p=$currentPage"
+            val result = getStringFromUrl(query)
+            mainObject = parser.parse(result) as JSONObject
+            issuesArray = mainObject["issues"] as JSONArray
+            issuesArraySize = issuesArray.size
+        }
+    }
+    return mutableListOf<String>()
 }
 
 /*
