@@ -36,15 +36,16 @@ private val MAX_ELASTICSEARCH_RESULTS = 10000
 fun main(args: Array<String>) {
 
     try {
-        //export QC projects
+
         val metricKeys = getMetricKeys()
-        val projectKeys = getProjectsContainingString("QC - col")//QC - aspectj, QC - jboss, QC - jtopen
-        println("projects: ${projectKeys.size}")
-        saveCurrentMeasuresAndIssues("current-measures-and-issues.csv", projectKeys, metricKeys)
+
+        //save current csv for QC projects
+        //val projectKeys = getProjectsContainingString("QC - col")//QC - aspectj, QC - jboss, QC - jtopen
+        //println("projects: ${projectKeys.size}")
+        //saveCurrentMeasuresAndIssues("current-measures-and-issues.csv", projectKeys, metricKeys)
 
 
-        //export "org.apache:commons-cli"
-        /*
+        //save history csv for "org.apache:commons-cli"
         val projectKey = "org.apache:commons-cli"
         saveNonemptyPastMeasures("nonempty-past-measures.txt", projectKey, metricKeys)
         val usefulMetricKeys = readListFromFile("nonempty-past-measures.txt")
@@ -52,8 +53,8 @@ fun main(args: Array<String>) {
         saveIssues("issues.csv", projectKey, "CLOSED,OPEN")
         mergeMeasuresWithIssues("measures.csv", "issues.csv", "measures-and-issues.csv")
 
-        saveJiraIssues("jira-issues.csv", "CLI")
-        */
+        //saveJiraIssues("jira-issues.csv", "CLI")
+
         //saveGitCommits()
 
     } catch (e: ParseException) {
@@ -114,9 +115,10 @@ private fun saveCurrentMeasuresAndIssues(fileName: String, projectKeys: List<Str
         }
         allProjectMeasures.add(measureValues)
 
-        //get issues
+        //save issues to file
         saveIssues("current-issues.csv", projectKey, "OPEN")
 
+        //read issues from file
         val issueCount = mutableMapOf<String, Int>()
         val issueCSV = readListFromFile("current-issues.csv")
         for (line in issueCSV.subList(1, issueCSV.size)) {
@@ -148,6 +150,7 @@ private fun saveCurrentMeasuresAndIssues(fileName: String, projectKeys: List<Str
             bw.newLine()
         }
     }
+    println("Measures and issues saved to $fileName")
 }
 
 
@@ -269,10 +272,6 @@ private fun saveMeasureHistory(fileName: String, projectKey: String, metricKeys:
 /*
 Saves issue history for a project in a .csv file
  */
-// TODO: split by subdirectories until none has more than 10 000 issues, then combine results
-//http://sonar.inf.unibz.it/api/components/tree?baseComponentKey=org.apache:commons-cli
-//http://sonar.inf.unibz.it/api/issues/search?componentKeys=org.apache:commons-cli:src/main/java/org/apache/commons/cli&statuses=OPEN
-//http://sonar.inf.unibz.it/component_issues?id=org.apache%3Acommons-cli#resolved=false|directories=src%2Fmain%2Fjava%2Forg%2Fapache%2Fcommons%2Fcli
 private fun saveIssues(fileName: String, projectKey: String, statuses: String) {
     BufferedWriter(FileWriter(fileName)).use { bw ->
         val header = "creation_date,update_date,rule,component"
@@ -291,7 +290,7 @@ private fun saveIssues(fileName: String, projectKey: String, statuses: String) {
 private fun saveIssueRows(componentKey: String, statuses: String, rows: MutableList<String>): MutableList<String> {
     val pageSize = 500
     var currentPage = 1
-    val issuesQuery = "$sonarInstance/api/issues/search" +
+    var issuesQuery = "$sonarInstance/api/issues/search" +
             "?componentKeys=$componentKey" +
             "&s=CREATION_DATE" +
             "&statuses=$statuses" +
@@ -299,31 +298,19 @@ private fun saveIssueRows(componentKey: String, statuses: String, rows: MutableL
             "&p=$currentPage"
     val sonarResult = getStringFromUrl(issuesQuery)
     var mainObject = parser.parse(sonarResult) as JSONObject
+    println(mainObject["total"].toString() + "    $componentKey")
+    //println("$componentKey \nobjects: " + mainObject["total"].toString())
     if (Integer.valueOf(mainObject["total"].toString()) > MAX_ELASTICSEARCH_RESULTS) {
-        //get components of component
-        //recursion for each component
-        val componentPageSize = 100
-        var page = 1
-        do {
-            val componentQuery = "http://sonar.inf.unibz.it/api/components/tree" +
-                    "?baseComponentKey=" + componentKey +
-                    "&ps=" + componentPageSize +
-                    "&p=" + page
-            val componentResult = getStringFromUrl(componentQuery)
-            val componentObject = parser.parse(componentResult) as JSONObject
-            val componentArray = componentObject["components"] as JSONArray
-            for (component in componentArray.filterIsInstance<JSONObject>()) {
-                val key = component["key"].toString()
-                saveIssueRows(key, statuses, rows)
-            }
-            page++
-        } while (componentArray.size > 0)
-
+        // if result size is too big, split it
+        val splitComponents = getSubComponents(componentKey)
+        for (component in splitComponents) {
+            saveIssueRows(component, statuses, rows)
+        }
     } else {
-        //take results
-        //go to all pages
+        // save results
         var issuesArray = mainObject["issues"] as JSONArray
         var issuesArraySize = issuesArray.size
+        //println("Saving $issuesArraySize/${mainObject["total"]}")
         while (issuesArraySize > 0) {
             // save row data
             for (issueObject in issuesArray.filterIsInstance<JSONObject>()) {
@@ -344,19 +331,59 @@ private fun saveIssueRows(componentKey: String, statuses: String, rows: MutableL
             }
             // get next page
             currentPage++
-            val query = "$sonarInstance/api/issues/search" +
+            issuesQuery = "$sonarInstance/api/issues/search" +
                     "?componentKeys=$componentKey" +
                     "&s=CREATION_DATE" +
                     "&statuses=$statuses" +
                     "&ps=$pageSize" +
                     "&p=$currentPage"
-            val result = getStringFromUrl(query)
+            val result = getStringFromUrl(issuesQuery)
             mainObject = parser.parse(result) as JSONObject
             issuesArray = mainObject["issues"] as JSONArray
             issuesArraySize = issuesArray.size
         }
     }
     return mutableListOf<String>()
+}
+
+/*
+Returns first level sub-components for a given component
+ */
+fun getSubComponents(componentKey: String): List<String> {
+    val components = mutableListOf<String>()
+    val pageSize = 500
+    var page = 1
+    do {
+        val componentQuery = "http://sonar.inf.unibz.it/api/components/tree" +
+                "?baseComponentKey=" + componentKey +
+                //"&strategy=children" +
+                "&ps=" + pageSize +
+                "&p=" + page
+        val componentResult = getStringFromUrl(componentQuery)
+        val componentObject = parser.parse(componentResult) as JSONObject
+        val componentArray = componentObject["components"] as JSONArray
+        componentArray.filterIsInstance<JSONObject>().mapTo(components) { it["key"].toString() }
+        page++
+    } while (componentArray.size > 0)
+
+    // remove lower level sub-components
+    //val result = removeSubComponents(components)
+    //return result
+    return components //tmp
+}
+
+fun removeSubComponents(list: List<String>): List<String> {
+    println("Before: " + list)
+    val result = mutableListOf<String>()
+    result.addAll(list)
+    for (component in list) {
+        for (comp in list) {
+            if(component != comp && component.contains((comp + "/")))
+                result.remove(component)
+        }
+    }
+    println("After: " + result)
+    return result
 }
 
 /*
@@ -426,7 +453,6 @@ fun getStringFromUrl(queryURL: String): String {
     println("Response Code : " + responseCode)
 
     val `in` = BufferedReader(InputStreamReader(con.inputStream))
-    //var inputLine: String
     val stringBuilder = StringBuilder()
     do {
         val inputLine = `in`.readLine()
