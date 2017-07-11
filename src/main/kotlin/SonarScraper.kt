@@ -22,7 +22,7 @@ fun main(args: Array<String>) {
         val ruleKeys = getRuleKeys()
 
         //save current csv for QC projects
-        val projectKeys = getProjectsContainingString("QC - col")//QC - aspectj, QC - jboss, QC - jtopen
+        val projectKeys = getProjectsContainingString("QC -")//QC - aspectj, QC - jboss, QC - jtopen
         //println("projects: ${projectKeys.size}")
         saveCurrentMeasuresAndIssues("current-measures-and-issues.csv", projectKeys, metricKeys, ruleKeys)
 
@@ -284,36 +284,41 @@ private fun saveIssueRows(componentKey: String, statuses: String, ruleKeys: List
             "&p=$currentPage"
     val sonarResult = getStringFromUrl(issuesQuery)
     var mainObject = parser.parse(sonarResult) as JSONObject
-    println(mainObject["total"].toString() + "    $componentKey")
-    if (Integer.valueOf(mainObject["total"].toString()) > MAX_ELASTICSEARCH_RESULTS) {
+    val totalIssues = Integer.valueOf(mainObject["total"].toString())
+    println("$totalIssues     issues in    $componentKey")
+    if (totalIssues > MAX_ELASTICSEARCH_RESULTS && ruleKeys.size > 1) {
         // if result size is too big, split it
         for (splitKeys in splitIntoBatches(ruleKeys, ruleKeys.size/2)) {
             saveIssueRows(componentKey, statuses, splitKeys, rows)
         }
     } else {
+        if (totalIssues > MAX_ELASTICSEARCH_RESULTS)
+            println("WARNING: only $MAX_ELASTICSEARCH_RESULTS of $totalIssues returned for ${ruleKeys.first()} in $componentKey")
         // save results
-        var issuesArray = mainObject["issues"] as JSONArray
-        var issuesArraySize = issuesArray.size
+        //var issuesArray = mainObject["issues"] as JSONArray
+        //var issuesArraySize = issuesArray.size
         //println("Saving $issuesArraySize/${mainObject["total"]}")
-        while (issuesArraySize > 0) {
+        while (true) {
             // save row data
+            val issuesArray = mainObject["issues"] as JSONArray
             for (issueObject in issuesArray.filterIsInstance<JSONObject>()) {
                 val creationDate = issueObject["creationDate"].toString()
                 val updateDate = issueObject["updateDate"].toString()
                 val rule = issueObject["rule"].toString()
                 val component = issueObject["component"].toString()
                 //val classname = component.replaceFirst((projectKey + ":").toRegex(), "")
-                val classname = component
                 val status = issueObject["status"].toString()
 
                 val closedDate = if (status == "CLOSED")
                     updateDate
                 else
                     ""
-                val rowItems = mutableListOf<String>(creationDate, closedDate, rule, classname)
+                val rowItems = mutableListOf<String>(creationDate, closedDate, rule, component)
                 rows.add(rowItems.joinToString(","))
             }
             // get next page
+            if (currentPage * pageSize >= totalIssues || currentPage >= 20)
+                break
             currentPage++
             issuesQuery = "$sonarInstance/api/issues/search" +
                     "?componentKeys=$componentKey" +
@@ -324,8 +329,6 @@ private fun saveIssueRows(componentKey: String, statuses: String, ruleKeys: List
                     "&p=$currentPage"
             val result = getStringFromUrl(issuesQuery)
             mainObject = parser.parse(result) as JSONObject
-            issuesArray = mainObject["issues"] as JSONArray
-            issuesArraySize = issuesArray.size
         }
     }
 }
