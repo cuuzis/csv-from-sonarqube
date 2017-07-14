@@ -18,6 +18,7 @@ fun main(args: Array<String>) {
 
     try {
 
+        /*
         val metricKeys = getMetricKeys()
         val ruleKeys = getRuleKeys()
 
@@ -35,9 +36,64 @@ fun main(args: Array<String>) {
         saveIssues("issues.csv", projectKey, "CLOSED,OPEN", ruleKeys)
         mergeMeasuresWithIssues("measures.csv", "issues.csv", "measures-and-issues.csv")
 
+        */
         //saveJiraIssues("jira-issues.csv", "CLI")
 
-        //saveGitCommits()
+
+        //saveGitCommits("git-commits.csv", "https://github.com/apache/commons-cli.git")
+
+        val jiraIssues = readListFromFile("jira-issues.csv")
+        val gitCommits = readListFromFile("git-commits.csv")
+
+
+        /*for (row in jiraIssues.subList(1, jiraIssues.size).map{it.split(",")}) {
+            val issueKey = row[0].toLowerCase()
+            val creationDate = row[1]
+            val resolutionDate = row[2]
+            //val resolution = row[3] == "Fixed"
+            //val type = row[4] == "Bug"
+            val priority = row[5]
+            val openDate = row[6]
+            val resolutionDate = row[7]
+
+        }*/
+        /*for (row in gitCommits.subList(1, gitCommits.size).map{it.split(",")}) {
+            val commitDate = row[0]
+            val sonarDate = row[1]
+            val hash = row[2]
+            val message = row[3]
+            println(commitDate)
+        }*/
+        BufferedWriter(FileWriter("git-commits-with-jira.csv")).use { bw ->
+            val header = "commit-date,sonar-date,hash,faults-closed,open-faults,closed-faults"
+            bw.write(header)
+            bw.newLine()
+            for (row in gitCommits.subList(1, gitCommits.size).map{it.split(",")}) {
+                val commitDate = row[0]
+                val sonarDate = row[1]
+                val hash = row[2]
+                val commitMessage = row[3]
+                bw.write("$commitDate,$sonarDate,$hash,")
+                val keys = mutableListOf<String>()
+                val openFaults = mutableListOf<String>()
+                val closedFaults = mutableListOf<String>()
+                jiraIssues.subList(1, jiraIssues.size).map{it.split(",")}
+                        .filter {
+                            val key = it[0].toLowerCase()
+                            commitMessage.toLowerCase().contains("(\\W$key\\W|^$key\\W|\\W$key\$)".toRegex()) }
+                        .forEach {
+                            keys.add(it[0])
+                            openFaults.add(it[6])
+                            closedFaults.add(it[7])
+                        }
+                bw.write(keys.joinToString(";"))
+                bw.write(",")
+                bw.write(openFaults.joinToString(";"))
+                bw.write(",")
+                bw.write(closedFaults.joinToString(";"))
+                bw.newLine()
+            }
+        }
 
     } catch (e: ParseException) {
         println("JSON parsing error")
