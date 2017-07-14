@@ -11,40 +11,44 @@ import java.time.temporal.ChronoUnit
 //val localPath = File("tmpGitRepo")
 
 fun saveGitCommits(fileName: String, repositoryURL: String) {
+    val rows = mutableListOf<List<String>>()
     // clone repository into temp folder
     //val git = cloneRemoteRepository(repositoryURL, File("tmpGitRepo"))
     val git = openLocalRepository(File("tmpGitRepo/.git"))
+    try {
+        val logEntries = git.log()
+                .call()
+                .reversed()
 
-    val logEntries = git.log()
-            .call()
-            .reversed()
 
-    val logDatesRaw = mutableListOf<Instant>()
-    val logHashes = mutableListOf<String>()
-    val logMessagesShort = mutableListOf<String>()
-    for(log in logEntries) {
-        logDatesRaw.add(Instant.ofEpochSecond(log.commitTime.toLong()))
-        logHashes.add(log.name)
-        logMessagesShort.add(log.shortMessage)
-        //logMessagesFull.add(log.fullMessage)
+        val logDatesRaw = mutableListOf<Instant>()
+        logEntries.mapTo(logDatesRaw) { Instant.ofEpochSecond(it.commitTime.toLong()) }
+        val logDatesSonarqube = smoothDates(logDatesRaw)
+
+        val totalCommitters = mutableSetOf<String>()
+        for ((idx, log) in logEntries.withIndex()) {
+            val row = mutableListOf<String>()
+            row.add(Instant.ofEpochSecond(log.commitTime.toLong()).toString())
+            row.add(logDatesSonarqube[idx].toString())
+            row.add(log.name)//hash
+            row.add(log.shortMessage.replace(",",";"))
+            row.add(log.committerIdent.emailAddress)
+            totalCommitters.add(log.committerIdent.emailAddress)
+            row.add(totalCommitters.size.toString())
+            //diff files
+            rows.add(row)
+        }
+
+    } finally {
+        git.close()
     }
-    val logDatesSonarqube = smoothDates(logDatesRaw)
-
-
-    git.close()
 
     BufferedWriter(FileWriter(fileName)).use { bw ->
-        val header = "date-original,date-sonarqube,hash,short-message"
+        val header = "git-date-original,git-date-sonarqube,git-hash,git-message,git-committer,git-total-committers,git-files-changed"
         bw.write(header)
         bw.newLine()
-        for ((idx, logDateRaw) in logDatesRaw.withIndex()) {
-            bw.write(logDateRaw.toString())
-            bw.write(",")
-            bw.write(logDatesSonarqube[idx].toString())
-            bw.write(",")
-            bw.write(logHashes[idx])
-            bw.write(",")
-            bw.write(logMessagesShort[idx].replace(",",";"))
+        for (row in rows) {
+            bw.write(row.joinToString(","))
             bw.newLine()
         }
         println("Git commits saved to '$fileName'")

@@ -6,6 +6,11 @@ import java.io.*
 import java.net.HttpURLConnection
 import java.net.URL
 import java.net.URLEncoder
+import java.time.Instant
+import java.time.OffsetDateTime
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
+import java.util.*
 
 
 val parser = JSONParser()
@@ -18,14 +23,18 @@ fun main(args: Array<String>) {
 
     try {
 
-        /*
+
+
         val metricKeys = getMetricKeys()
         val ruleKeys = getRuleKeys()
 
+        /*
         //save current csv for QC projects
         val projectKeys = getProjectsContainingString("QC -")//QC - aspectj, QC - jboss, QC - jtopen
         //println("projects: ${projectKeys.size}")
         saveCurrentMeasuresAndIssues("current-measures-and-issues.csv", projectKeys, metricKeys, ruleKeys)
+
+       */
 
 
         //save history csv for "org.apache:commons-cli"
@@ -36,69 +45,94 @@ fun main(args: Array<String>) {
         saveIssues("issues.csv", projectKey, "CLOSED,OPEN", ruleKeys)
         mergeMeasuresWithIssues("measures.csv", "issues.csv", "measures-and-issues.csv")
 
-        */
+
+
         //saveJiraIssues("jira-issues.csv", "CLI")
+        saveGitCommits("git-commits.csv", "https://github.com/apache/commons-cli.git")
 
 
-        //saveGitCommits("git-commits.csv", "https://github.com/apache/commons-cli.git")
+        val jiraIssues = readListFromFile("jira-issues.csv").map{it.split(",")}
+        val gitCommits = readListFromFile("git-commits.csv").map{it.split(",")}
 
-        val jiraIssues = readListFromFile("jira-issues.csv")
-        val gitCommits = readListFromFile("git-commits.csv")
+        val measuresAndIssues = readListFromFile("measures-and-issues.csv").map{it.split(",")}
 
-
-        /*for (row in jiraIssues.subList(1, jiraIssues.size).map{it.split(",")}) {
-            val issueKey = row[0].toLowerCase()
-            val creationDate = row[1]
-            val resolutionDate = row[2]
-            //val resolution = row[3] == "Fixed"
-            //val type = row[4] == "Bug"
-            val priority = row[5]
-            val openDate = row[6]
-            val resolutionDate = row[7]
-
-        }*/
-        /*for (row in gitCommits.subList(1, gitCommits.size).map{it.split(",")}) {
-            val commitDate = row[0]
-            val sonarDate = row[1]
-            val hash = row[2]
-            val message = row[3]
-            println(commitDate)
-        }*/
-        BufferedWriter(FileWriter("git-commits-with-jira.csv")).use { bw ->
-            val header = "commit-date,sonar-date,hash,faults-closed,open-faults,closed-faults"
+        // projectKey.replace
+        val resultFile = projectKey.replace("\\W".toRegex(),"-") + ".csv"
+        BufferedWriter(FileWriter(resultFile)).use { bw ->
+            val header = measuresAndIssues[0].joinToString(",") + ",commit-date,commit-hash,committer,total-committers,faults-closed,open-faults,closed-faults"
             bw.write(header)
             bw.newLine()
-            for (row in gitCommits.subList(1, gitCommits.size).map{it.split(",")}) {
-                val commitDate = row[0]
-                val sonarDate = row[1]
-                val hash = row[2]
-                val commitMessage = row[3]
-                bw.write("$commitDate,$sonarDate,$hash,")
-                val keys = mutableListOf<String>()
-                val openFaults = mutableListOf<String>()
-                val closedFaults = mutableListOf<String>()
-                jiraIssues.subList(1, jiraIssues.size).map{it.split(",")}
-                        .filter {
-                            val key = it[0].toLowerCase()
-                            commitMessage.toLowerCase().contains("(\\W$key\\W|^$key\\W|\\W$key\$)".toRegex()) }
-                        .forEach {
-                            keys.add(it[0])
-                            openFaults.add(it[6])
-                            closedFaults.add(it[7])
-                        }
-                bw.write(keys.joinToString(";"))
-                bw.write(",")
-                bw.write(openFaults.joinToString(";"))
-                bw.write(",")
-                bw.write(closedFaults.joinToString(";"))
+            for (measureRow in measuresAndIssues.subList(1, measuresAndIssues.size)) {
+                bw.write(measureRow.joinToString(","))
+                // find corresponding commit
+                val measureDate = measureRow[0]
+                var foundCommit = false
+                for (commit in gitCommits) {
+                    val commitSonarDate = commit[1]
+                    if (commitSonarDate == measureDate) {
+                        foundCommit = true
+                        val commitDate = commit[0]
+                        val commitHash = commit[2]
+                        val commitMessage = commit[3]
+                        val committer = commit[4]
+                        val totalCommitters = commit[5]
+                        bw.write(",$commitDate,$commitHash,$committer,$totalCommitters")
+
+                        // add jira info to commit
+                        val jiraKeys = mutableListOf<String>()
+                        val jiraOpenFaults = mutableListOf<String>()
+                        val jiraClosedFaults = mutableListOf<String>()
+                        jiraIssues.subList(1, jiraIssues.size)
+                                .filter {
+                                    val key = it[0].toLowerCase()
+                                    commitMessage.toLowerCase().contains("(\\W$key\\W|^$key\\W|\\W$key\$)".toRegex())
+                                }
+                                .forEach {
+                                    jiraKeys.add(it[0])
+                                    jiraOpenFaults.add(it[6])
+                                    jiraClosedFaults.add(it[7])
+                                }
+                        bw.write(",")
+                        bw.write(jiraKeys.joinToString(";"))
+                        bw.write(",")
+                        bw.write(jiraOpenFaults.joinToString(";"))
+                        bw.write(",")
+                        bw.write(jiraClosedFaults.joinToString(";"))
+
+                        break
+                    }
+                }
+                if (!foundCommit)
+                    throw Exception("Git commit not found for sonarqube scan at $measureDate")
                 bw.newLine()
             }
         }
+        println("Results saved to $resultFile")
 
     } catch (e: ParseException) {
         println("JSON parsing error")
         e.printStackTrace()
     }
+}
+
+/*
+* Parses Instant to sonarqube-format datetime
+*/
+fun getSonarDateFromInstant(date: Instant): String {
+    val formatter = DateTimeFormatter.ISO_OFFSET_DATE_TIME
+            .withLocale(Locale.getDefault())
+            .withZone(ZoneId.systemDefault())
+    val result = formatter.format(date)
+            .removeRange(22, 23) // removes colon from time zone (to post timestamp to sonarqube analysis)
+    return result
+}
+
+/*
+* Parses sonarqube-format datetime to an Instant
+*/
+fun  getInstantFromSonarDate(sonarDate: String): Instant {
+    val dateStr = sonarDate.substring(0, 22) + ":" + sonarDate.substring(22)
+    return OffsetDateTime.parse(dateStr).toInstant()
 }
 
 /*
@@ -286,7 +320,7 @@ private fun saveMeasureHistory(fileName: String, projectKey: String, metricKeys:
         val measureKey = metricObject["metric"].toString()
         val measureHistory = metricObject["history"] as JSONArray
         for (measureEntry in measureHistory.filterIsInstance<JSONObject>()) {
-            val date = measureEntry["date"].toString()
+            val date = getInstantFromSonarDate( measureEntry["date"].toString() ).toString()
             val value = measureEntry["value"].toString()
             if (!measureMap.containsKey(date)) {
                 measureMap.put(date, Array(metricKeys.size, init = { _ -> "0" }))
@@ -297,7 +331,7 @@ private fun saveMeasureHistory(fileName: String, projectKey: String, metricKeys:
         }
     }
     BufferedWriter(FileWriter(fileName)).use { bw ->
-        val columns: List<String> = listOf<String>("date") + metricKeys
+        val columns: List<String> = listOf<String>("measure-date") + metricKeys
         bw.write(columns.joinToString(","))
         bw.newLine()
         for ((key, values) in measureMap) {
@@ -350,6 +384,7 @@ private fun saveIssueRows(componentKey: String, statuses: String, ruleKeys: List
     } else {
         if (totalIssues > MAX_ELASTICSEARCH_RESULTS)
             println("WARNING: only $MAX_ELASTICSEARCH_RESULTS of $totalIssues returned for ${ruleKeys.first()} in $componentKey")
+            //TODO:split by date
         // save results
         //var issuesArray = mainObject["issues"] as JSONArray
         //var issuesArraySize = issuesArray.size
@@ -358,18 +393,24 @@ private fun saveIssueRows(componentKey: String, statuses: String, ruleKeys: List
             // save row data
             val issuesArray = mainObject["issues"] as JSONArray
             for (issueObject in issuesArray.filterIsInstance<JSONObject>()) {
-                val creationDate = issueObject["creationDate"].toString()
-                val updateDate = issueObject["updateDate"].toString()
+                val creationDateSonar = issueObject["creationDate"].toString()
+                val creationDate = getInstantFromSonarDate(creationDateSonar).toString()
+                val updateDateSonar = issueObject["updateDate"].toString()
+                val updateDate =
+                        if (updateDateSonar != "")
+                            getInstantFromSonarDate(updateDateSonar).toString()
+                        else
+                            ""
                 val rule = issueObject["rule"].toString()
                 val component = issueObject["component"].toString()
-                //val classname = component.replaceFirst((projectKey + ":").toRegex(), "")
+                val classname = component.replaceFirst((componentKey + ":").toRegex(), "")
                 val status = issueObject["status"].toString()
-
-                val closedDate = if (status == "CLOSED")
-                    updateDate
-                else
-                    ""
-                val rowItems = mutableListOf<String>(creationDate, closedDate, rule, component)
+                val closedDate =
+                        if (status == "CLOSED")
+                            updateDate
+                        else
+                            ""
+                val rowItems = mutableListOf<String>(creationDate, closedDate, rule, classname)
                 rows.add(rowItems.joinToString(","))
             }
             // get next page
