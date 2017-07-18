@@ -1,25 +1,25 @@
+import com.opencsv.CSVWriter
 import java.io.File
 import org.eclipse.jgit.api.Git
 import org.eclipse.jgit.storage.file.FileRepositoryBuilder
-import org.omg.CosNaming.NamingContextExtPackage.StringNameHelper
-import java.io.BufferedWriter
 import java.io.FileWriter
 import java.time.Instant
 import java.time.temporal.ChronoUnit
 
-
-//val localPath = File("tmpGitRepo")
-
 fun saveGitCommits(fileName: String, repositoryURL: String) {
+
+    val header = listOf("git-date-original", "git-date-sonarqube", "git-hash", "git-message", "git-committer", "git-total-committers", "git-files-changed")
     val rows = mutableListOf<List<String>>()
-    // clone repository into temp folder
-    //val git = cloneRemoteRepository(repositoryURL, File("tmpGitRepo"))
-    val git = openLocalRepository(File("tmpGitRepo/.git"))
+    rows.add(header)
+
+    // clone repository into temp folder and access data
+    val localPath = File("tmpGitRepo")
+    val git = cloneRemoteRepository(repositoryURL, localPath)
+    //val git = openLocalRepository(File("tmpGitRepo/.git"))
     try {
         val logEntries = git.log()
                 .call()
                 .reversed()
-
 
         val logDatesRaw = mutableListOf<Instant>()
         logEntries.mapTo(logDatesRaw) { Instant.ofEpochSecond(it.commitTime.toLong()) }
@@ -31,11 +31,11 @@ fun saveGitCommits(fileName: String, repositoryURL: String) {
             row.add(Instant.ofEpochSecond(log.commitTime.toLong()).toString())
             row.add(logDatesSonarqube[idx].toString())
             row.add(log.name)//hash
-            row.add(log.shortMessage.replace(",",";"))
+            row.add(log.shortMessage)
             row.add(log.committerIdent.emailAddress)
             totalCommitters.add(log.committerIdent.emailAddress)
             row.add(totalCommitters.size.toString())
-            //diff files
+
             rows.add(row)
         }
 
@@ -43,23 +43,18 @@ fun saveGitCommits(fileName: String, repositoryURL: String) {
         git.close()
     }
 
-    BufferedWriter(FileWriter(fileName)).use { bw ->
-        val header = "git-date-original,git-date-sonarqube,git-hash,git-message,git-committer,git-total-committers,git-files-changed"
-        bw.write(header)
-        bw.newLine()
-        for (row in rows) {
-            bw.write(row.joinToString(","))
-            bw.newLine()
-        }
-        println("Git commits saved to '$fileName'")
+    // save data to file
+    FileWriter(fileName).use { fw ->
+        val csvWriter = CSVWriter(fw)
+        csvWriter.writeAll(rows.map { it.toTypedArray() })
+        println("Git commit data saved to $fileName")
     }
 
     // delete temp folder
-    /*
     if (localPath.deleteRecursively())
         println("Deleted '$localPath' successfully")
     else
-        println("Could not delete '$localPath'")*/
+        println("Could not delete '$localPath'")
 }
 
 fun cloneRemoteRepository(repositoryURL: String, directory: File): Git {
@@ -69,7 +64,7 @@ fun cloneRemoteRepository(repositoryURL: String, directory: File): Git {
                 .setURI(repositoryURL)
                 .setDirectory(directory)
                 .call()
-        println("Repository cloned into '${result.repository.directory.parent}'")
+        println("Git repository cloned into '${result.repository.directory.parent}'")
         return result
     } catch (e: Exception) {
         throw Exception("Could not clone the remote repository", e)

@@ -1,7 +1,7 @@
+import com.opencsv.CSVWriter
 import org.json.simple.JSONArray
 import org.json.simple.JSONObject
 import org.json.simple.parser.JSONParser
-import org.json.simple.parser.ParseException
 import java.io.*
 import java.net.HttpURLConnection
 import java.net.URL
@@ -11,6 +11,15 @@ import java.time.OffsetDateTime
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.*
+import java.io.FileReader
+import com.opencsv.bean.CsvToBeanBuilder
+import com.opencsv.bean.StatefulBeanToCsv
+import com.opencsv.bean.StatefulBeanToCsvBuilder
+import org.eclipse.jgit.api.Git
+import java.io.FileWriter
+import java.io.Writer
+
+
 
 
 val parser = JSONParser()
@@ -21,98 +30,120 @@ private val MAX_ELASTICSEARCH_RESULTS = 10000
 
 fun main(args: Array<String>) {
 
-    try {
+
+    val metricKeys = getMetricKeys()
+    val ruleKeys = getRuleKeys()
+
+
+    //save current csv for QC projects
+    //val projectKeys = getProjectsContainingString("QC -")//QC - aspectj, QC - jboss, QC - jtopen
+    //println("projects: ${projectKeys.size}")
+    //saveCurrentMeasuresAndIssues("current-measures-and-issues.csv", projectKeys, metricKeys, ruleKeys)
+
+
+    //save history csv for "org.apache:commons-cli"
+    val projectKey = "org.apache:commons-cli"
+    saveNonemptyPastMeasures("nonempty-past-measures.txt", projectKey, metricKeys)
+    val usefulMetricKeys = readListFromFile("nonempty-past-measures.txt")
+    saveMeasureHistory("measures.csv", projectKey, usefulMetricKeys)
+    saveIssues("issues.csv", projectKey, "CLOSED,OPEN", ruleKeys)
+    mergeMeasuresWithIssues("measures.csv", "issues.csv", "measures-and-issues.csv")
+
+
+    saveJiraIssues("jira-issues.csv", "CLI")
+    saveGitCommits("git-commits.csv", "https://github.com/apache/commons-cli.git")
+
+
+    //val jiraIssues = readListFromFile("jira-issues.csv").map{it.split(",")}
+    //val gitCommits = readListFromFile("git-commits.csv").map{it.split(",")}
+
+    //val measuresAndIssues = readListFromFile("measures-and-issues.csv").map{it.split(",")}
 
 
 
-        val metricKeys = getMetricKeys()
-        val ruleKeys = getRuleKeys()
+    //val csvFile = File("git-commits.csv")
+    /*val reader = CSVReader(FileReader(csvFile))
+    val all = reader.readAll()
+    for (smth in all.subList(0,10).map{ it.toList() })
+        println(smth)*/
 
-        /*
-        //save current csv for QC projects
-        val projectKeys = getProjectsContainingString("QC -")//QC - aspectj, QC - jboss, QC - jtopen
-        //println("projects: ${projectKeys.size}")
-        saveCurrentMeasuresAndIssues("current-measures-and-issues.csv", projectKeys, metricKeys, ruleKeys)
+    //https://youtrack.jetbrains.com/issue/KT-5464
 
-       */
+    //val reader = FileReader(csvFile)
 
+    //val beans: List<Any?> = CsvToBeanBuilder<GitCommits>(FileReader("git-commits.csv"))
+    //        .withType(GitCommits::class.java).build().parse()
 
-        //save history csv for "org.apache:commons-cli"
-        val projectKey = "org.apache:commons-cli"
-        saveNonemptyPastMeasures("nonempty-past-measures.txt", projectKey, metricKeys)
-        val usefulMetricKeys = readListFromFile("nonempty-past-measures.txt")
-        saveMeasureHistory("measures.csv", projectKey, usefulMetricKeys)
-        saveIssues("issues.csv", projectKey, "CLOSED,OPEN", ruleKeys)
-        mergeMeasuresWithIssues("measures.csv", "issues.csv", "measures-and-issues.csv")
+    /*for (bean in beans.subList(0,10).map { it as GitCommits }) {
+        println(bean.message)
+        println(bean.sonarDate)
+    }*/
 
-
-
-        //saveJiraIssues("jira-issues.csv", "CLI")
-        saveGitCommits("git-commits.csv", "https://github.com/apache/commons-cli.git")
+    //val writer = FileWriter("yourfile.csv")
+    //val beanToCsv = StatefulBeanToCsvBuilder<GitCommits>(writer).build()
 
 
-        val jiraIssues = readListFromFile("jira-issues.csv").map{it.split(",")}
-        val gitCommits = readListFromFile("git-commits.csv").map{it.split(",")}
+    //@Suppress("UNCHECKED_CAST")
+    //(beanToCsv as StatefulBeanToCsv<List<GitCommits>>).write(beans as List<GitCommits>)
+    //beanToCsv.write(beans as List<Any?>)
 
-        val measuresAndIssues = readListFromFile("measures-and-issues.csv").map{it.split(",")}
+    //beans.forEach { bean -> beanToCsv.write(bean) }
+    //writer.close()
 
-        // projectKey.replace
-        val resultFile = projectKey.replace("\\W".toRegex(),"-") + ".csv"
-        BufferedWriter(FileWriter(resultFile)).use { bw ->
-            val header = measuresAndIssues[0].joinToString(",") + ",commit-date,commit-hash,committer,total-committers,faults-closed,open-faults,closed-faults"
-            bw.write(header)
-            bw.newLine()
-            for (measureRow in measuresAndIssues.subList(1, measuresAndIssues.size)) {
-                bw.write(measureRow.joinToString(","))
-                // find corresponding commit
-                val measureDate = measureRow[0]
-                var foundCommit = false
-                for (commit in gitCommits) {
-                    val commitSonarDate = commit[1]
-                    if (commitSonarDate == measureDate) {
-                        foundCommit = true
-                        val commitDate = commit[0]
-                        val commitHash = commit[2]
-                        val commitMessage = commit[3]
-                        val committer = commit[4]
-                        val totalCommitters = commit[5]
-                        bw.write(",$commitDate,$commitHash,$committer,$totalCommitters")
 
-                        // add jira info to commit
-                        val jiraKeys = mutableListOf<String>()
-                        val jiraOpenFaults = mutableListOf<String>()
-                        val jiraClosedFaults = mutableListOf<String>()
-                        jiraIssues.subList(1, jiraIssues.size)
-                                .filter {
-                                    val key = it[0].toLowerCase()
-                                    commitMessage.toLowerCase().contains("(\\W$key\\W|^$key\\W|\\W$key\$)".toRegex())
-                                }
-                                .forEach {
-                                    jiraKeys.add(it[0])
-                                    jiraOpenFaults.add(it[6])
-                                    jiraClosedFaults.add(it[7])
-                                }
-                        bw.write(",")
-                        bw.write(jiraKeys.joinToString(";"))
-                        bw.write(",")
-                        bw.write(jiraOpenFaults.joinToString(";"))
-                        bw.write(",")
-                        bw.write(jiraClosedFaults.joinToString(";"))
+    /*
+    val resultFile = projectKey.replace("\\W".toRegex(),"-") + ".csv"
+    BufferedWriter(FileWriter(resultFile)).use { bw ->
+        val header = measuresAndIssues[0].joinToString(",") + ",commit-date,commit-hash,committer,total-committers,faults-closed,open-faults,closed-faults"
+        bw.write(header)
+        bw.newLine()
+        for (measureRow in measuresAndIssues.subList(1, measuresAndIssues.size)) {
+            bw.write(measureRow.joinToString(","))
+            // find corresponding commit
+            val measureDate = measureRow[0]
+            var foundCommit = false
+            for (commit in gitCommits) {
+                val commitSonarDate = commit[1]
+                if (commitSonarDate == measureDate) {
+                    foundCommit = true
+                    val commitDate = commit[0]
+                    val commitHash = commit[2]
+                    val commitMessage = commit[3]
+                    val committer = commit[4]
+                    val totalCommitters = commit[5]
+                    bw.write(",$commitDate,$commitHash,$committer,$totalCommitters")
 
-                        break
-                    }
+                    // add jira info to commit
+                    val jiraKeys = mutableListOf<String>()
+                    val jiraOpenFaults = mutableListOf<String>()
+                    val jiraClosedFaults = mutableListOf<String>()
+                    jiraIssues.subList(1, jiraIssues.size)
+                            .filter {
+                                val key = it[0].toLowerCase()
+                                commitMessage.toLowerCase().contains("(\\W$key\\W|^$key\\W|\\W$key\$)".toRegex())
+                            }
+                            .forEach {
+                                jiraKeys.add(it[0])
+                                jiraOpenFaults.add(it[6])
+                                jiraClosedFaults.add(it[7])
+                            }
+                    bw.write(",")
+                    bw.write(jiraKeys.joinToString(";"))
+                    bw.write(",")
+                    bw.write(jiraOpenFaults.joinToString(";"))
+                    bw.write(",")
+                    bw.write(jiraClosedFaults.joinToString(";"))
+
+                    break
                 }
-                if (!foundCommit)
-                    throw Exception("Git commit not found for sonarqube scan at $measureDate")
-                bw.newLine()
             }
+            if (!foundCommit)
+                throw Exception("Git commit not found for sonarqube scan at $measureDate")
+            bw.newLine()
         }
-        println("Results saved to $resultFile")
-
-    } catch (e: ParseException) {
-        println("JSON parsing error")
-        e.printStackTrace()
     }
+    println("Results saved to $resultFile")
+    */
 }
 
 /*
@@ -310,9 +341,6 @@ private fun saveMeasureHistory(fileName: String, projectKey: String, metricKeys:
 
     val measureResult = getStringFromUrl(measureQuery)
     val measureObject = parser.parse(measureResult) as JSONObject
-    val pagingObject = measureObject["paging"] as JSONObject
-    val measureCount = Integer.parseInt(pagingObject["total"].toString())
-    println("Measures found: $measureCount")
     val measureArray = measureObject["measures"] as JSONArray
     val measureMap = sortedMapOf<String, Array<String>>()
 
@@ -322,22 +350,23 @@ private fun saveMeasureHistory(fileName: String, projectKey: String, metricKeys:
         for (measureEntry in measureHistory.filterIsInstance<JSONObject>()) {
             val date = getInstantFromSonarDate( measureEntry["date"].toString() ).toString()
             val value = measureEntry["value"].toString()
-            if (!measureMap.containsKey(date)) {
-                measureMap.put(date, Array(metricKeys.size, init = { _ -> "0" }))
-            }
+            measureMap.putIfAbsent(date, Array(metricKeys.size, init = { _ -> "0" }))
             val valueArray = measureMap[date]
-            //if (measureKey == "quality_profiles" || measureKey == "quality_gate_details")
-            valueArray!![metricKeys.indexOf(measureKey)] = value.replace(",", ";")
+            valueArray!![metricKeys.indexOf(measureKey)] = value
         }
     }
-    BufferedWriter(FileWriter(fileName)).use { bw ->
-        val columns: List<String> = listOf<String>("measure-date") + metricKeys
-        bw.write(columns.joinToString(","))
-        bw.newLine()
-        for ((key, values) in measureMap) {
-            bw.write(key + "," + values.joinToString(","))
-            bw.newLine()
-        }
+
+    // save data to file
+    val header = listOf<String>("measure-date") + metricKeys
+    val rows = mutableListOf<List<String>>()
+    rows.add(header)
+    for ((key, values) in measureMap) {
+        rows.add((listOf(key) + values))
+    }
+    FileWriter(fileName).use { fw ->
+        val csvWriter = CSVWriter(fw)
+        csvWriter.writeAll(rows.map { it.toTypedArray() })
+        println("Sonarqube measures saved to $fileName")
     }
 }
 
@@ -345,24 +374,23 @@ private fun saveMeasureHistory(fileName: String, projectKey: String, metricKeys:
 Saves issue history for a project in a .csv file
  */
 private fun saveIssues(fileName: String, projectKey: String, statuses: String, ruleKeys: List<String>) {
-    val rows = mutableListOf<String>()
+
+    val header = listOf("creation-date", "update-date", "rule", "component")
+    val rows = mutableListOf<List<String>>()
+    rows.add(header)
+
     for (splitKeys in splitIntoBatches(ruleKeys, 40)) {
         saveIssueRows(projectKey, statuses, splitKeys, rows)
     }
 
-    BufferedWriter(FileWriter(fileName)).use { bw ->
-        val header = "creation_date,update_date,rule,component"
-        bw.write(header)
-        bw.newLine()
-        rows.map {
-            bw.write(it)
-            bw.newLine()
-        }
-        println("Issues saved to $fileName")
+    FileWriter(fileName).use { fw ->
+        val csvWriter = CSVWriter(fw)
+        csvWriter.writeAll(rows.map { it.toTypedArray() })
+        println("Sonarqube issues saved to $fileName")
     }
 }
 
-private fun saveIssueRows(componentKey: String, statuses: String, ruleKeys: List<String>, rows: MutableList<String>) {
+private fun saveIssueRows(componentKey: String, statuses: String, ruleKeys: List<String>, rows: MutableList<List<String>>) {
     val pageSize = 500
     var currentPage = 1
     var issuesQuery = "$sonarInstance/api/issues/search" +
@@ -375,7 +403,6 @@ private fun saveIssueRows(componentKey: String, statuses: String, ruleKeys: List
     val sonarResult = getStringFromUrl(issuesQuery)
     var mainObject = parser.parse(sonarResult) as JSONObject
     val totalIssues = Integer.valueOf(mainObject["total"].toString())
-    println("$totalIssues     issues in    $componentKey")
     if (totalIssues > MAX_ELASTICSEARCH_RESULTS && ruleKeys.size > 1) {
         // if result size is too big, split it
         for (splitKeys in splitIntoBatches(ruleKeys, ruleKeys.size/2)) {
@@ -410,8 +437,7 @@ private fun saveIssueRows(componentKey: String, statuses: String, ruleKeys: List
                             updateDate
                         else
                             ""
-                val rowItems = mutableListOf<String>(creationDate, closedDate, rule, classname)
-                rows.add(rowItems.joinToString(","))
+                rows.add(mutableListOf<String>(creationDate, closedDate, rule, classname))
             }
             // get next page
             if (currentPage * pageSize >= totalIssues || currentPage >= 20)
@@ -473,60 +499,6 @@ private fun getRuleKeys(): List<String> {
 }
 
 /*
-Merges the list of issues with the measure history, grouping issues by date
- */
-private fun mergeMeasuresWithIssues(measuresFile: String, issuesFile: String, combinedFile: String) {
-    val ruleKeys = mutableSetOf<String>()
-    val issuesByDateOpened = mutableMapOf<String, MutableList<String>>()
-    val issuesByDateClosed = mutableMapOf<String, MutableList<String>>()
-
-    val issueCSV = readListFromFile(issuesFile)
-    for (line in issueCSV.subList(1, issueCSV.size)) {
-        val creation_date = line.split(",")[0]
-        val update_date = line.split(",")[1]
-        val ruleKey = line.split(",")[2]
-        //val component = line.split(",")[3]
-        ruleKeys.add(ruleKey)
-
-        issuesByDateOpened.computeIfAbsent(creation_date, { _ -> mutableListOf() })
-                .add(ruleKey)
-        issuesByDateClosed.computeIfAbsent(update_date, { _ -> mutableListOf() })
-                .add(ruleKey)
-    }
-
-    val measureCSV = readListFromFile(measuresFile)
-
-    println("Measure cols: ${measureCSV[0].split(",").size}")
-    println("Issue Cols: ${ruleKeys.size}")
-    BufferedWriter(FileWriter(combinedFile)).use { bw ->
-        bw.write(measureCSV[0] + "," + ruleKeys.joinToString(","))
-        bw.newLine()
-
-
-        val currentIssueCount = mutableMapOf<String, String>()
-        for (ruleKey in ruleKeys) {
-            currentIssueCount[ruleKey] = "0"
-        }
-
-        for (line in measureCSV.subList(1, measureCSV.size)) {
-            val measureDate = line.split(",")[0]
-            val openedIssues = issuesByDateOpened.getOrDefault(measureDate, mutableListOf())
-            for (ruleKey in openedIssues) {
-                currentIssueCount[ruleKey] = (Integer.valueOf(currentIssueCount[ruleKey]!!) + 1).toString()
-            }
-
-            val closedIssues = issuesByDateClosed.getOrDefault(measureDate, mutableListOf())
-            for (ruleKey in closedIssues) {
-                currentIssueCount[ruleKey] = (Integer.valueOf(currentIssueCount[ruleKey]!!) - 1).toString()
-            }
-
-            bw.write(line + "," + currentIssueCount.values.joinToString(","))
-            bw.newLine()
-        }
-    }
-}
-
-/*
 Parses an URL request as a string
  */
 fun getStringFromUrl(queryURL: String): String {
@@ -552,7 +524,7 @@ fun getStringFromUrl(queryURL: String): String {
 /*
 Reads each line from file into a string list
  */
-private fun readListFromFile(filename: String): List<String> {
+fun readListFromFile(filename: String): List<String> {
     val result = mutableListOf<String>()
     val file = File(filename)
     try {

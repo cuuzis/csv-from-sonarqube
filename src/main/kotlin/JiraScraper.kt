@@ -1,3 +1,4 @@
+import com.opencsv.CSVWriter
 import org.json.simple.JSONArray
 import org.json.simple.JSONObject
 import java.io.BufferedWriter
@@ -9,7 +10,10 @@ Saves all issues for a given project
  */
 fun saveJiraIssues(fileName: String, projectKey: String) {
 
+    val header = listOf("key", "creation-date", "resolution-date", "resolution", "type", "priority", "open-issues", "closed-issues")
     val rows = mutableListOf<List<String>>()
+    rows.add(header)
+
     var startAt = 0
     do {
         val jqlString = ("project=$projectKey" +
@@ -66,21 +70,12 @@ fun saveJiraIssues(fileName: String, projectKey: String) {
         closedIssuesAtKey.put(issueKey, closedIssues)
     }
 
+    val rows2 = listOf(header) + rows.subList(1, rows.size).map { it + openIssuesAtKey[it[0]].toString() + closedIssuesAtKey[it[0]].toString() }
 
-
-    BufferedWriter(FileWriter(fileName)).use { bw ->
-        val header = "key,creation-date,resolution-date,resolution,type,priority,open-issues,closed-issues"
-        bw.write(header)
-        bw.newLine()
-
-        for(row in rows) {
-            val issueKey = row[0]
-            bw.write((row + openIssuesAtKey[issueKey] + closedIssuesAtKey[issueKey]).joinToString(","))
-            bw.newLine()
-        }
-        //bw.write(row.joinToString(","))
-        //bw.newLine()
-
-        println("Data saved to $fileName")
+    // save data to file
+    FileWriter(fileName).use { fw ->
+        val csvWriter = CSVWriter(fw)
+        csvWriter.writeAll(rows2.map { it.toTypedArray() })
+        println("Jira issue data saved to $fileName")
     }
 }
