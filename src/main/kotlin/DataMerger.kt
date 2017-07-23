@@ -5,6 +5,10 @@ import java.io.File
 import java.io.FileReader
 import java.io.FileWriter
 import com.opencsv.bean.StatefulBeanToCsvBuilder
+import csv_model.GitCommits
+import csv_model.JiraFaults
+import csv_model.MergedIssues
+import csv_model.SonarIssues
 
 
 /*
@@ -113,61 +117,38 @@ fun mergeFaultsAndSmells(commitFile: String, faultFile: String, issuesFile: Stri
 
     println("Merged in ${(System.currentTimeMillis() - startTime)/1000.0}s")
     println("Merged result saved to $resultFile")
-}
 
 
 
-/*
-    //val resultFile = projectKey.replace("\\W".toRegex(),"-") + ".csv"
-    BufferedWriter(FileWriter(resultFile)).use { bw ->
-        val header = measuresAndIssues[0].joinToString(",") + ",commit-date,commit-hash,committer,total-committers,faults-closed,open-faults,closed-faults"
-        bw.write(header)
-        bw.newLine()
-        for (measureRow in measuresAndIssues.subList(1, measuresAndIssues.size)) {
-            bw.write(measureRow.joinToString(","))
-            // find corresponding commit
-            val measureDate = measureRow[0]
-            var foundCommit = false
-            for (commit in gitCommits) {
-                val commitSonarDate = commit[1]
-                if (commitSonarDate == measureDate) {
-                    foundCommit = true
-                    val commitDate = commit[0]
-                    val commitHash = commit[2]
-                    val commitMessage = commit[3]
-                    val committer = commit[4]
-                    val totalCommitters = commit[5]
-                    bw.write(",$commitDate,$commitHash,$committer,$totalCommitters")
+    //TODO: make this a new function:
+    //groupFaultsAndIssues
+    val newFileName = "grouped-by-faults.csv"
+    val faultKeys = mutableSetOf<String>()
+    rows.mapTo(faultKeys) { it.jiraKey.orEmpty() }
+    val issueKeys = mutableSetOf<String>()
+    rows.mapTo(issueKeys) { it.sonarRuleKey.orEmpty() }
 
-                    // add jira info to commit
-                    val jiraKeys = mutableListOf<String>()
-                    val jiraOpenFaults = mutableListOf<String>()
-                    val jiraClosedFaults = mutableListOf<String>()
-                    jiraIssues.subList(1, jiraIssues.size)
-                            .filter {
-                                val key = it[0].toLowerCase()
-                                commitMessage.toLowerCase().contains("(\\W$key\\W|^$key\\W|\\W$key\$)".toRegex())
-                            }
-                            .forEach {
-                                jiraKeys.add(it[0])
-                                jiraOpenFaults.add(it[6])
-                                jiraClosedFaults.add(it[7])
-                            }
-                    bw.write(",")
-                    bw.write(jiraKeys.joinToString(";"))
-                    bw.write(",")
-                    bw.write(jiraOpenFaults.joinToString(";"))
-                    bw.write(",")
-                    bw.write(jiraClosedFaults.joinToString(";"))
 
-                    break
-                }
-            }
-            if (!foundCommit)
-                throw Exception("Git commit not found for sonarqube scan at $measureDate")
-            bw.newLine()
+    val header = listOf<String>("jira-key") + issueKeys
+    val dataRows = mutableListOf<List<String>>()
+    dataRows.add(header)
+
+    for (jiraKey in faultKeys) {
+        val currentIssueCount = mutableMapOf<String, Int>()
+        for (issueKey in issueKeys)
+            currentIssueCount[issueKey] = 0
+
+        val issuesForFault = rows.filter { it.jiraKey == jiraKey } // multiple commits for same fault?
+        for (bean in issuesForFault) {
+            currentIssueCount[bean.sonarRuleKey.orEmpty()] = currentIssueCount[bean.sonarRuleKey.orEmpty()]!! + 1
         }
+        dataRows.add(listOf(jiraKey) + currentIssueCount.map { it.value.toString() })
     }
-    println("Results saved to $resultFile")
 
-        */
+    // save data to file
+    FileWriter(newFileName).use { fw ->
+        val csvWriter = CSVWriter(fw)
+        csvWriter.writeAll(dataRows.map { it.toTypedArray() })
+        println("Combined data saved to $newFileName")
+    }
+}

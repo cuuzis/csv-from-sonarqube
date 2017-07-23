@@ -1,3 +1,5 @@
+package csv_model
+
 import com.opencsv.bean.CsvBindByName
 
 class MergedIssues(

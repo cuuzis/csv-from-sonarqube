@@ -69,20 +69,20 @@ fun main(args: Array<String>) {
 
     //val reader = FileReader(csvFile)
 
-    //val beans: List<Any?> = CsvToBeanBuilder<GitCommits>(FileReader("git-commits.csv"))
-    //        .withType(GitCommits::class.java).build().parse()
+    //val beans: List<Any?> = CsvToBeanBuilder<csv_model.GitCommits>(FileReader("git-commits.csv"))
+    //        .withType(csv_model.GitCommits::class.java).build().parse()
 
-    /*for (bean in beans.subList(0,10).map { it as GitCommits }) {
+    /*for (bean in beans.subList(0,10).map { it as csv_model.GitCommits }) {
         println(bean.message)
         println(bean.sonarDate)
     }*/
 
     //val writer = FileWriter("yourfile.csv")
-    //val beanToCsv = StatefulBeanToCsvBuilder<GitCommits>(writer).build()
+    //val beanToCsv = StatefulBeanToCsvBuilder<csv_model.GitCommits>(writer).build()
 
 
     //@Suppress("UNCHECKED_CAST")
-    //(beanToCsv as StatefulBeanToCsv<List<GitCommits>>).write(beans as List<GitCommits>)
+    //(beanToCsv as StatefulBeanToCsv<List<csv_model.GitCommits>>).write(beans as List<csv_model.GitCommits>)
     //beanToCsv.write(beans as List<Any?>)
 
     //beans.forEach { bean -> beanToCsv.write(bean) }
