@@ -12,14 +12,7 @@ import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.*
 import java.io.FileReader
-import com.opencsv.bean.CsvToBeanBuilder
-import com.opencsv.bean.StatefulBeanToCsv
-import com.opencsv.bean.StatefulBeanToCsvBuilder
-import org.eclipse.jgit.api.Git
 import java.io.FileWriter
-import java.io.Writer
-
-
 
 
 val parser = JSONParser()
@@ -31,8 +24,8 @@ private val MAX_ELASTICSEARCH_RESULTS = 10000
 fun main(args: Array<String>) {
 
 
-    val metricKeys = getMetricKeys()
-    val ruleKeys = getRuleKeys()
+    //val metricKeys = getMetricKeys()
+    //val ruleKeys = getRuleKeys()
 
 
     //save current csv for QC projects
@@ -41,6 +34,7 @@ fun main(args: Array<String>) {
     //saveCurrentMeasuresAndIssues("current-measures-and-issues.csv", projectKeys, metricKeys, ruleKeys)
 
 
+    /*
     //save history csv for "org.apache:commons-cli"
     val projectKey = "org.apache:commons-cli"
     saveNonemptyPastMeasures("nonempty-past-measures.txt", projectKey, metricKeys)
@@ -52,6 +46,10 @@ fun main(args: Array<String>) {
 
     saveJiraIssues("jira-issues.csv", "CLI")
     saveGitCommits("git-commits.csv", "https://github.com/apache/commons-cli.git")
+
+*/
+    //projectKey.replace("\\W".toRegex(),"-") + ".csv"
+    mergeFaultsAndSmells("git-commits.csv","jira-issues.csv", "issues.csv", "faults-and-smells.csv")
 
 
     //val jiraIssues = readListFromFile("jira-issues.csv").map{it.split(",")}
