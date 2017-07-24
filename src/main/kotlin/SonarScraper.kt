@@ -1,4 +1,7 @@
 import com.opencsv.CSVWriter
+import com.opencsv.bean.CsvToBeanBuilder
+import csv_model.ArchitectureSmells
+import csv_model.SonarIssues
 import org.json.simple.JSONArray
 import org.json.simple.JSONObject
 import org.json.simple.parser.JSONParser
@@ -13,6 +16,9 @@ import java.time.format.DateTimeFormatter
 import java.util.*
 import java.io.FileReader
 import java.io.FileWriter
+import java.io.File
+
+
 
 
 val parser = JSONParser()
@@ -24,14 +30,104 @@ private val MAX_ELASTICSEARCH_RESULTS = 10000
 fun main(args: Array<String>) {
 
 
-    //val metricKeys = getMetricKeys()
-    //val ruleKeys = getRuleKeys()
+    val projectKey = getProjectsContainingString("QC - axion").first()
+    /*val folderStr = projectKey.replace("\\W".toRegex(),"-") + "/"
+    val folder = File(folderStr)
+    if (folder.exists()) {
+        if (!folder.deleteRecursively())
+            throw Exception("Could not delete ${folder.name} directory")
+    }
+    folder.mkdir()*/
+
+
+    // read code smells
+    val issuesFolderName = projectKey.replace("\\W".toRegex(),"-")
+    val issueBeans = CsvToBeanBuilder<SonarIssues>(FileReader(File("$issuesFolderName/current-issues.csv")))
+            .withType(SonarIssues::class.java).build().parse()
+            .map { it as SonarIssues }
+
+    val issueRuleKeys = sortedSetOf<String>()
+    issueBeans.mapTo(issueRuleKeys) { it.ruleKey.orEmpty() }
+
+    // read architectural smells
+    val classCyclicDependancies = File("architecture-smells-arcan/axion-1.0-M2output/classCyclesShapeTable.csv")
+    val archSmellBeans = CsvToBeanBuilder<ArchitectureSmells>(FileReader(classCyclicDependancies))
+            .withType(ArchitectureSmells::class.java).build().parse()
+            .map { it as ArchitectureSmells }
+
+
+    val header = listOf<String>("arch-class-cyclic-occurrences", "arch-class-cyclic-components", "component") + issueRuleKeys.toList()
+    val rows = mutableListOf<List<String>>()
+    rows.add(header)
+
+    // add all sonar issues and match architectural smells to them
+    for (sonarIssue in issueBeans.distinctBy { it.component }) {
+        val archSmellOccurences = archSmellBeans
+                .flatMap { it.getComponentList() }
+                .count { sonarIssue.component.orEmpty().endsWith(it) }
+        val archSmellComponents = archSmellBeans
+                .filter { archSmell ->
+                    var contains = false
+                    archSmell.getComponentList().forEach {component ->
+                        if (sonarIssue.component.orEmpty().endsWith(component))
+                            contains = true
+                    }
+                    contains
+                }.count()
+        val row = mutableListOf(archSmellOccurences.toString(), archSmellComponents.toString(), sonarIssue.component.orEmpty())
+        for (issueRuleKey in issueRuleKeys) {
+            val sonarIssues = issueBeans.filter { it.component == sonarIssue.component && it.ruleKey == issueRuleKey }
+                    .count()
+            row.add(sonarIssues.toString())
+        }
+        rows.add(row)
+    }
+
+    // add architecture smells that did not have a corresponding issue in SQ
+    val archSmellsWithNoIssues = archSmellBeans
+            .flatMap { it.getComponentList() }
+            .filter { component ->
+                issueBeans.distinctBy { it.component }
+                        .none { it.component.orEmpty().endsWith(component) }
+            }.distinct()
+    //copy pasta:
+    for (noIssueComponent in archSmellsWithNoIssues) {
+        val archSmellOccurences = archSmellBeans
+                .flatMap { it.getComponentList() }
+                .count { noIssueComponent.orEmpty().endsWith(it) }
+        val archSmellComponents = archSmellBeans
+                .filter { archSmell ->
+                    var contains = false
+                    archSmell.getComponentList().forEach {component ->
+                        if (noIssueComponent.orEmpty().endsWith(component))
+                            contains = true
+                    }
+                    contains
+                }.count()
+        val row = mutableListOf(archSmellOccurences.toString(), archSmellComponents.toString(), noIssueComponent.orEmpty())
+        issueRuleKeys.forEach { row.add("0") }
+        rows.add(row)
+    }
+
+    val fileName = "$issuesFolderName/architecture-and-sonar-issues.csv"
+    FileWriter(fileName).use { fw ->
+        val csvWriter = CSVWriter(fw)
+        csvWriter.writeAll(rows.map { it.toTypedArray() })
+    }
+    println("Architectural and code issues saved to $fileName")
+
+
+    return
+
+
+    val metricKeys = getMetricKeys()
+    val ruleKeys = getRuleKeys()
 
 
     //save current csv for QC projects
-    //val projectKeys = getProjectsContainingString("QC -")//QC - aspectj, QC - jboss, QC - jtopen
-    //println("projects: ${projectKeys.size}")
-    //saveCurrentMeasuresAndIssues("current-measures-and-issues.csv", projectKeys, metricKeys, ruleKeys)
+    val projectKeys = getProjectsContainingString("QC - axion")//QC - aspectj, QC - jboss, QC - jtopen
+    println("projects: ${projectKeys.size}")
+    saveCurrentMeasuresAndIssues(projectKeys, metricKeys, ruleKeys)
 
 
     /*
@@ -49,7 +145,7 @@ fun main(args: Array<String>) {
 
 */
     //projectKey.replace("\\W".toRegex(),"-") + ".csv"
-    mergeFaultsAndSmells("git-commits.csv","jira-issues.csv", "issues.csv", "faults-and-smells.csv")
+    //mergeFaultsAndSmells("git-commits.csv","jira-issues.csv", "issues.csv", "faults-and-smells.csv")
 
 
     //val jiraIssues = readListFromFile("jira-issues.csv").map{it.split(",")}
@@ -181,7 +277,7 @@ fun  getProjectsContainingString(partOfName: String): List<String> {
 /*
 Saves in a .csv file all of the current measures and issues for given projects
  */
-private fun saveCurrentMeasuresAndIssues(fileName: String, projectKeys: List<String>, metricKeys: List<String>, ruleKeys: List<String>) {
+private fun saveCurrentMeasuresAndIssues(projectKeys: List<String>, metricKeys: List<String>, ruleKeys: List<String>) {
     val measureKeys = mutableSetOf<String>()
     val issueKeys = mutableSetOf<String>()
     val allProjectMeasures = mutableListOf<Map<String,String>>()
@@ -217,39 +313,43 @@ private fun saveCurrentMeasuresAndIssues(fileName: String, projectKeys: List<Str
         allProjectMeasures.add(measureValues)
 
         //save issues to file
-        saveIssues("current-issues.csv", projectKey, "OPEN", ruleKeys)
+        val issuesFolderName = projectKey.replace("\\W".toRegex(),"-")
+        saveIssues("$issuesFolderName/current-issues.csv", projectKey, "OPEN", ruleKeys)
 
-        //read issues from file
+        //read issues from file and count them
         val issueCount = mutableMapOf<String, Int>()
-        val issueCSV = readListFromFile("current-issues.csv")
-        for (line in issueCSV.subList(1, issueCSV.size)) {
-            val ruleKey = line.split(",")[2]
+        val issueBeans = CsvToBeanBuilder<SonarIssues>(FileReader(File("$issuesFolderName/current-issues.csv")))
+                .withType(SonarIssues::class.java).build().parse()
+                .map { it as SonarIssues }
+        for (issueBean in issueBeans) {
+            val ruleKey = issueBean.ruleKey.orEmpty()
             issueKeys.add(ruleKey)
             val previousCount = issueCount.getOrDefault(ruleKey, 0)
             issueCount[ruleKey] = previousCount + 1
         }
         allProjectIssues.add(issueCount)
     }
-    BufferedWriter(FileWriter(fileName)).use { bw ->
-        //header
-        val sortedMeasureKeys = measureKeys.toSortedSet()
-        val sortedIssueKeys = issueKeys.toSortedSet()
-        bw.write(sortedMeasureKeys.joinToString(","))
-        bw.write(",")
-        bw.write(sortedIssueKeys.joinToString(","))
-        bw.newLine()
 
-        //rows
-        for ((idx, measureValues) in allProjectMeasures.withIndex()) {
-            val issueValues = allProjectIssues[idx]
+    // summary for all projects
+    val fileName = "current-measures-and-issues.csv"
+    //header
+    val sortedMeasureKeys = measureKeys.toSortedSet()
+    val sortedIssueKeys = issueKeys.toSortedSet()
+    val header = sortedMeasureKeys.toList() + sortedIssueKeys.toList()
+    val rows = mutableListOf<List<String>>()
+    rows.add(header)
 
-            val rowMeasures = sortedMeasureKeys.map { measureValues[it] ?: "null" }
-            val rowIssues = sortedIssueKeys.map { issueValues[it] ?: 0 }
-            bw.write(rowMeasures.joinToString(","))
-            bw.write(",")
-            bw.write(rowIssues.joinToString(","))
-            bw.newLine()
-        }
+    //rows
+    for ((idx, measureValues) in allProjectMeasures.withIndex()) {
+        val issueValues = allProjectIssues[idx]
+        val rowMeasures = sortedMeasureKeys.map { measureValues[it] ?: "null" }
+        val rowIssues = sortedIssueKeys.map { issueValues[it] ?: 0 }
+        rows.add(rowMeasures + rowIssues.map { it.toString() })
+    }
+
+    FileWriter(fileName).use { fw ->
+        val csvWriter = CSVWriter(fw)
+        csvWriter.writeAll(rows.map { it.toTypedArray() })
     }
     println("Measures and issues saved to $fileName")
 }
