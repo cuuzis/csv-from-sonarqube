@@ -1,7 +1,7 @@
 import com.opencsv.CSVWriter
 import com.opencsv.bean.CsvToBeanBuilder
-import csv_model.ArchitectureSmells
-import csv_model.SonarIssues
+import csv_model.extracted.ArchitectureSmells
+import csv_model.extracted.SonarIssues
 import org.json.simple.JSONArray
 import org.json.simple.JSONObject
 import org.json.simple.parser.JSONParser
@@ -29,106 +29,34 @@ private val MAX_ELASTICSEARCH_RESULTS = 10000
 
 fun main(args: Array<String>) {
 
-
-    val projectKey = getProjectsContainingString("QC - axion").first()
-    /*val folderStr = projectKey.replace("\\W".toRegex(),"-") + "/"
-    val folder = File(folderStr)
-    if (folder.exists()) {
-        if (!folder.deleteRecursively())
-            throw Exception("Could not delete ${folder.name} directory")
-    }
-    folder.mkdir()*/
-
-
-    // read code smells
-    val issuesFolderName = projectKey.replace("\\W".toRegex(),"-")
-    val issueBeans = CsvToBeanBuilder<SonarIssues>(FileReader(File("$issuesFolderName/current-issues.csv")))
-            .withType(SonarIssues::class.java).build().parse()
-            .map { it as SonarIssues }
-
-    val issueRuleKeys = sortedSetOf<String>()
-    issueBeans.mapTo(issueRuleKeys) { it.ruleKey.orEmpty() }
-
-    // read architectural smells
-    val classCyclicDependancies = File("architecture-smells-arcan/axion-1.0-M2output/classCyclesShapeTable.csv")
-    val archSmellBeans = CsvToBeanBuilder<ArchitectureSmells>(FileReader(classCyclicDependancies))
-            .withType(ArchitectureSmells::class.java).build().parse()
-            .map { it as ArchitectureSmells }
-
-
-    val header = listOf<String>("arch-class-cyclic-occurrences", "arch-class-cyclic-components", "component") + issueRuleKeys.toList()
-    val rows = mutableListOf<List<String>>()
-    rows.add(header)
-
-    // add all sonar issues and match architectural smells to them
-    for (sonarIssue in issueBeans.distinctBy { it.component }) {
-        val archSmellOccurences = archSmellBeans
-                .flatMap { it.getComponentList() }
-                .count { sonarIssue.component.orEmpty().endsWith(it) }
-        val archSmellComponents = archSmellBeans
-                .filter { archSmell ->
-                    var contains = false
-                    archSmell.getComponentList().forEach {component ->
-                        if (sonarIssue.component.orEmpty().endsWith(component))
-                            contains = true
-                    }
-                    contains
-                }.count()
-        val row = mutableListOf(archSmellOccurences.toString(), archSmellComponents.toString(), sonarIssue.component.orEmpty())
-        for (issueRuleKey in issueRuleKeys) {
-            val sonarIssues = issueBeans.filter { it.component == sonarIssue.component && it.ruleKey == issueRuleKey }
-                    .count()
-            row.add(sonarIssues.toString())
-        }
-        rows.add(row)
-    }
-
-    // add architecture smells that did not have a corresponding issue in SQ
-    val archSmellsWithNoIssues = archSmellBeans
-            .flatMap { it.getComponentList() }
-            .filter { component ->
-                issueBeans.distinctBy { it.component }
-                        .none { it.component.orEmpty().endsWith(component) }
-            }.distinct()
-    //copy pasta:
-    for (noIssueComponent in archSmellsWithNoIssues) {
-        val archSmellOccurences = archSmellBeans
-                .flatMap { it.getComponentList() }
-                .count { noIssueComponent.orEmpty().endsWith(it) }
-        val archSmellComponents = archSmellBeans
-                .filter { archSmell ->
-                    var contains = false
-                    archSmell.getComponentList().forEach {component ->
-                        if (noIssueComponent.orEmpty().endsWith(component))
-                            contains = true
-                    }
-                    contains
-                }.count()
-        val row = mutableListOf(archSmellOccurences.toString(), archSmellComponents.toString(), noIssueComponent.orEmpty())
-        issueRuleKeys.forEach { row.add("0") }
-        rows.add(row)
-    }
-
-    val fileName = "$issuesFolderName/architecture-and-sonar-issues.csv"
-    FileWriter(fileName).use { fw ->
-        val csvWriter = CSVWriter(fw)
-        csvWriter.writeAll(rows.map { it.toTypedArray() })
-    }
-    println("Architectural and code issues saved to $fileName")
-
-
-    return
-
-
-    val metricKeys = getMetricKeys()
+    //val metricKeys = getMetricKeys()
     val ruleKeys = getRuleKeys()
 
-
     //save current csv for QC projects
-    val projectKeys = getProjectsContainingString("QC - axion")//QC - aspectj, QC - jboss, QC - jtopen
-    println("projects: ${projectKeys.size}")
-    saveCurrentMeasuresAndIssues(projectKeys, metricKeys, ruleKeys)
+    val projectKeys = getProjectsContainingString("QC - check")//QC - aspectj, QC - jboss, QC - jtopen
+    println("Extracting data for ${projectKeys.size} projects")
 
+    for (projectKey in projectKeys) {
+        //create work folder
+        val folderStr = "extraction/" + projectKey.replace("\\W".toRegex(),"-") + "/"
+        val folder = File(folderStr)
+        if (folder.exists()) {
+            if (!folder.deleteRecursively())
+                throw Exception("Could not delete ${folder.name} directory")
+        }
+        if (!folder.mkdirs())
+            throw Exception("Could not create ${folder.name} directory")
+
+        // read architecture smells
+        val archCycleSmellFile = findArchitectureSmellFile(projectKey,"classCyclesShapeTable.csv")
+
+        saveIssues(folderStr + "current-measures-issues.csv", projectKey, "OPEN", ruleKeys)
+        //saveCurrentMeasuresAndIssues(folderStr + "current-measures-issues.csv", projectKey, metricKeys, ruleKeys)
+        mergeArchitectureAndCodeIssues(
+                folderStr + "architecture-and-sonar-issues.csv",
+                folderStr + "current-measures-issues.csv",
+                archCycleSmellFile)
+    }
 
     /*
     //save history csv for "org.apache:commons-cli"
@@ -142,102 +70,19 @@ fun main(args: Array<String>) {
 
     saveJiraIssues("jira-issues.csv", "CLI")
     saveGitCommits("git-commits.csv", "https://github.com/apache/commons-cli.git")
-
-*/
-    //projectKey.replace("\\W".toRegex(),"-") + ".csv"
+    */
     //mergeFaultsAndSmells("git-commits.csv","jira-issues.csv", "issues.csv", "faults-and-smells.csv")
 
 
-    //val jiraIssues = readListFromFile("jira-issues.csv").map{it.split(",")}
-    //val gitCommits = readListFromFile("git-commits.csv").map{it.split(",")}
+}
 
-    //val measuresAndIssues = readListFromFile("measures-and-issues.csv").map{it.split(",")}
-
-
-
-    //val csvFile = File("git-commits.csv")
-    /*val reader = CSVReader(FileReader(csvFile))
-    val all = reader.readAll()
-    for (smth in all.subList(0,10).map{ it.toList() })
-        println(smth)*/
-
-    //https://youtrack.jetbrains.com/issue/KT-5464
-
-    //val reader = FileReader(csvFile)
-
-    //val beans: List<Any?> = CsvToBeanBuilder<csv_model.GitCommits>(FileReader("git-commits.csv"))
-    //        .withType(csv_model.GitCommits::class.java).build().parse()
-
-    /*for (bean in beans.subList(0,10).map { it as csv_model.GitCommits }) {
-        println(bean.message)
-        println(bean.sonarDate)
-    }*/
-
-    //val writer = FileWriter("yourfile.csv")
-    //val beanToCsv = StatefulBeanToCsvBuilder<csv_model.GitCommits>(writer).build()
-
-
-    //@Suppress("UNCHECKED_CAST")
-    //(beanToCsv as StatefulBeanToCsv<List<csv_model.GitCommits>>).write(beans as List<csv_model.GitCommits>)
-    //beanToCsv.write(beans as List<Any?>)
-
-    //beans.forEach { bean -> beanToCsv.write(bean) }
-    //writer.close()
-
-
-    /*
-    val resultFile = projectKey.replace("\\W".toRegex(),"-") + ".csv"
-    BufferedWriter(FileWriter(resultFile)).use { bw ->
-        val header = measuresAndIssues[0].joinToString(",") + ",commit-date,commit-hash,committer,total-committers,faults-closed,open-faults,closed-faults"
-        bw.write(header)
-        bw.newLine()
-        for (measureRow in measuresAndIssues.subList(1, measuresAndIssues.size)) {
-            bw.write(measureRow.joinToString(","))
-            // find corresponding commit
-            val measureDate = measureRow[0]
-            var foundCommit = false
-            for (commit in gitCommits) {
-                val commitSonarDate = commit[1]
-                if (commitSonarDate == measureDate) {
-                    foundCommit = true
-                    val commitDate = commit[0]
-                    val commitHash = commit[2]
-                    val commitMessage = commit[3]
-                    val committer = commit[4]
-                    val totalCommitters = commit[5]
-                    bw.write(",$commitDate,$commitHash,$committer,$totalCommitters")
-
-                    // add jira info to commit
-                    val jiraKeys = mutableListOf<String>()
-                    val jiraOpenFaults = mutableListOf<String>()
-                    val jiraClosedFaults = mutableListOf<String>()
-                    jiraIssues.subList(1, jiraIssues.size)
-                            .filter {
-                                val key = it[0].toLowerCase()
-                                commitMessage.toLowerCase().contains("(\\W$key\\W|^$key\\W|\\W$key\$)".toRegex())
-                            }
-                            .forEach {
-                                jiraKeys.add(it[0])
-                                jiraOpenFaults.add(it[6])
-                                jiraClosedFaults.add(it[7])
-                            }
-                    bw.write(",")
-                    bw.write(jiraKeys.joinToString(";"))
-                    bw.write(",")
-                    bw.write(jiraOpenFaults.joinToString(";"))
-                    bw.write(",")
-                    bw.write(jiraClosedFaults.joinToString(";"))
-
-                    break
-                }
-            }
-            if (!foundCommit)
-                throw Exception("Git commit not found for sonarqube scan at $measureDate")
-            bw.newLine()
-        }
-    }
-    println("Results saved to $resultFile")
-    */
+fun  findArchitectureSmellFile(projectKey: String, fileName: String): File {
+    val architectureRoot = File("architecture-smells-arcan/")
+    val architectureFolder = architectureRoot.listFiles().find {
+        it.toString().toLowerCase().startsWith(
+                architectureRoot.name + File.separatorChar + projectKey.removePrefix("QC:").toLowerCase())
+    }!!
+    return architectureFolder.listFiles().find { it.name == fileName}!!
 }
 
 /*
@@ -277,6 +122,7 @@ fun  getProjectsContainingString(partOfName: String): List<String> {
 /*
 Saves in a .csv file all of the current measures and issues for given projects
  */
+// TODO: split into measures for key only
 private fun saveCurrentMeasuresAndIssues(projectKeys: List<String>, metricKeys: List<String>, ruleKeys: List<String>) {
     val measureKeys = mutableSetOf<String>()
     val issueKeys = mutableSetOf<String>()

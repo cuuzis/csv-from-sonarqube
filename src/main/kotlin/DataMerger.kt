@@ -5,10 +5,11 @@ import java.io.File
 import java.io.FileReader
 import java.io.FileWriter
 import com.opencsv.bean.StatefulBeanToCsvBuilder
-import csv_model.GitCommits
-import csv_model.JiraFaults
-import csv_model.MergedIssues
-import csv_model.SonarIssues
+import csv_model.extracted.ArchitectureSmells
+import csv_model.extracted.GitCommits
+import csv_model.extracted.JiraFaults
+import csv_model.merged.MergedIssues
+import csv_model.extracted.SonarIssues
 
 
 /*
@@ -151,4 +152,88 @@ fun mergeFaultsAndSmells(commitFile: String, faultFile: String, issuesFile: Stri
         csvWriter.writeAll(dataRows.map { it.toTypedArray() })
         println("Combined data saved to $newFileName")
     }
+}
+
+/**
+ * Merges architecture and code issues by components
+ * Full join, ignores components without problems:
+ *   Class | Arch issue | Smell
+ *   ----------------------------
+ *     A         1          1
+ *     B         -          1
+ *     C         1          -
+ */
+fun mergeArchitectureAndCodeIssues(fileName: String, issueFile: String, classCyclicDependenciesFile: File) {
+    // read code smells
+    val issueBeans = CsvToBeanBuilder<SonarIssues>(FileReader(File(issueFile)))
+            .withType(SonarIssues::class.java).build().parse()
+            .map { it as SonarIssues }
+
+    val issueRuleKeys = sortedSetOf<String>()
+    issueBeans.mapTo(issueRuleKeys) { it.ruleKey.orEmpty() }
+
+    // read architectural smells
+    val archSmellBeans = CsvToBeanBuilder<ArchitectureSmells>(FileReader(classCyclicDependenciesFile))
+            .withType(ArchitectureSmells::class.java).build().parse()
+            .map { it as ArchitectureSmells }
+
+
+    val header = listOf<String>("arch-class-cyclic-occurrences", "arch-class-cyclic-components", "component") + issueRuleKeys.toList()
+    val rows = mutableListOf<List<String>>()
+    rows.add(header)
+
+    // add all sonar issues and match architectural smells to them
+    for (sonarIssue in issueBeans.distinctBy { it.component }) {
+        val archSmellOccurences = archSmellBeans
+                .flatMap { it.getComponentList() }
+                .count { sonarIssue.component.orEmpty().endsWith(it) }
+        val archSmellComponents = archSmellBeans
+                .filter { archSmell ->
+                    var contains = false
+                    archSmell.getComponentList().forEach { component ->
+                        if (sonarIssue.component.orEmpty().endsWith(component))
+                            contains = true
+                    }
+                    contains
+                }.count()
+        val row = mutableListOf(archSmellOccurences.toString(), archSmellComponents.toString(), sonarIssue.component.orEmpty())
+        for (issueRuleKey in issueRuleKeys) {
+            val sonarIssues = issueBeans.filter { it.component == sonarIssue.component && it.ruleKey == issueRuleKey }
+                    .count()
+            row.add(sonarIssues.toString())
+        }
+        rows.add(row)
+    }
+
+    // add architecture smells that did not have a corresponding issue in SQ
+    val archSmellsWithNoIssues = archSmellBeans
+            .flatMap { it.getComponentList() }
+            .filter { component ->
+                issueBeans.distinctBy { it.component }
+                        .none { it.component.orEmpty().endsWith(component) }
+            }.distinct()
+    //copy pasta:
+    for (noIssueComponent in archSmellsWithNoIssues) {
+        val archSmellOccurences = archSmellBeans
+                .flatMap { it.getComponentList() }
+                .count { noIssueComponent.orEmpty().endsWith(it) }
+        val archSmellComponents = archSmellBeans
+                .filter { archSmell ->
+                    var contains = false
+                    archSmell.getComponentList().forEach { component ->
+                        if (noIssueComponent.orEmpty().endsWith(component))
+                            contains = true
+                    }
+                    contains
+                }.count()
+        val row = mutableListOf(archSmellOccurences.toString(), archSmellComponents.toString(), noIssueComponent.orEmpty())
+        issueRuleKeys.forEach { row.add("0") }
+        rows.add(row)
+    }
+
+    FileWriter(fileName).use { fw ->
+        val csvWriter = CSVWriter(fw)
+        csvWriter.writeAll(rows.map { it.toTypedArray() })
+    }
+    println("Architectural and code issues saved to $fileName")
 }

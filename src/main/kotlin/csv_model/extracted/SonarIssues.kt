@@ -1,4 +1,4 @@
-package csv_model
+package csv_model.extracted
 
 import com.opencsv.bean.CsvBindByName
 
