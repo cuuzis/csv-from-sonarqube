@@ -163,7 +163,7 @@ fun mergeFaultsAndSmells(commitFile: String, faultFile: String, issuesFile: Stri
  *     B         -          1
  *     C         1          -
  */
-fun mergeArchitectureAndCodeIssues(fileName: String, issueFile: String, classCyclicDependenciesFile: File) {
+fun mergeArchitectureAndCodeIssues(outputByClass: String, outputByCycle: String, issueFile: String, cyclicDependencyFile: File) {
     // read code smells
     val issueBeans = CsvToBeanBuilder<SonarIssues>(FileReader(File(issueFile)))
             .withType(SonarIssues::class.java).build().parse()
@@ -173,12 +173,17 @@ fun mergeArchitectureAndCodeIssues(fileName: String, issueFile: String, classCyc
     issueBeans.mapTo(issueRuleKeys) { it.ruleKey.orEmpty() }
 
     // read architectural smells
-    val archSmellBeans = CsvToBeanBuilder<ArchitectureSmells>(FileReader(classCyclicDependenciesFile))
+    val archSmellBeans = CsvToBeanBuilder<ArchitectureSmells>(FileReader(cyclicDependencyFile))
             .withType(ArchitectureSmells::class.java).build().parse()
             .map { it as ArchitectureSmells }
 
 
-    val header = listOf<String>("arch-class-cyclic-occurrences", "arch-class-cyclic-components", "component") + issueRuleKeys.toList()
+    val header = listOf<String>(
+            "cycle-ids",
+            "component",
+            "arch-cycle-size",
+            "arch-cycle-classes") +
+            issueRuleKeys.toList()
     val rows = mutableListOf<List<String>>()
     rows.add(header)
 
@@ -195,8 +200,12 @@ fun mergeArchitectureAndCodeIssues(fileName: String, issueFile: String, classCyc
                             contains = true
                     }
                     contains
-                }.count()
-        val row = mutableListOf(archSmellOccurences.toString(), archSmellComponents.toString(), sonarIssue.component.orEmpty())
+                }
+        val row = mutableListOf<String>(
+                archSmellComponents.map { it.cycleId }.joinToString(";"),
+                sonarIssue.component.orEmpty(),
+                archSmellOccurences.toString(),
+                archSmellComponents.count().toString())
         for (issueRuleKey in issueRuleKeys) {
             val sonarIssues = issueBeans.filter { it.component == sonarIssue.component && it.ruleKey == issueRuleKey }
                     .count()
@@ -225,15 +234,50 @@ fun mergeArchitectureAndCodeIssues(fileName: String, issueFile: String, classCyc
                             contains = true
                     }
                     contains
-                }.count()
-        val row = mutableListOf(archSmellOccurences.toString(), archSmellComponents.toString(), noIssueComponent.orEmpty())
+                }
+        val row = mutableListOf(
+                archSmellComponents.map { it.cycleId }.joinToString(";"),
+                noIssueComponent.orEmpty(),
+                archSmellOccurences.toString(),
+                archSmellComponents.count().toString())
         issueRuleKeys.forEach { row.add("0") }
         rows.add(row)
     }
 
-    FileWriter(fileName).use { fw ->
+    FileWriter(outputByClass).use { fw ->
         val csvWriter = CSVWriter(fw)
         csvWriter.writeAll(rows.map { it.toTypedArray() })
     }
-    println("Architectural and code issues saved to $fileName")
+
+
+    // group by cycles
+    val rowsByCycles = mutableListOf(header)
+    for (archSmell in archSmellBeans) {
+        val affectedClasses = archSmell.getComponentList()
+        val relatedIssues = issueBeans.filter { issue ->
+            var contains = false
+            affectedClasses.forEach { component ->
+                if (issue.component.orEmpty().endsWith(component))
+                    contains = true
+            }
+            contains
+        }
+        val row = mutableListOf<String>(
+                archSmell.cycleId.orEmpty(),
+                affectedClasses.joinToString(";"),
+                affectedClasses.count().toString(),
+                affectedClasses.distinct().count().toString())
+        for (issueRuleKey in issueRuleKeys) {
+            val sonarIssues = relatedIssues.count { it.ruleKey == issueRuleKey }
+            row.add(sonarIssues.toString())
+        }
+        rowsByCycles.add(row)
+    }
+
+    FileWriter(outputByCycle).use { fw ->
+        val csvWriter = CSVWriter(fw)
+        csvWriter.writeAll(rowsByCycles.map { it.toTypedArray() })
+    }
+
+    println("Architectural and code issues saved to $outputByClass and $outputByCycle")
 }

@@ -4,6 +4,7 @@ import com.opencsv.bean.CsvBindByName
 
 class ArchitectureSmells(
         @CsvBindByName(column = "IdCycle") val cycleId: String? = null,
+        @CsvBindByName(column = "numVertices") val numVertices: String? = null,
         @CsvBindByName(column = "ElementList") val elementList: String? = null) {
 
     fun getComponentList(): List<String> {

@@ -50,12 +50,13 @@ fun main(args: Array<String>) {
         // read architecture smells
         val archCycleSmellFile = findArchitectureSmellFile(projectKey,"classCyclesShapeTable.csv")
 
-        saveIssues(folderStr + "current-measures-issues.csv", projectKey, "OPEN", ruleKeys)
+        saveIssues(folderStr + "current-issues.csv", projectKey, "OPEN", ruleKeys)
         //saveCurrentMeasuresAndIssues(folderStr + "current-measures-issues.csv", projectKey, metricKeys, ruleKeys)
         mergeArchitectureAndCodeIssues(
-                folderStr + "architecture-and-sonar-issues.csv",
-                folderStr + "current-measures-issues.csv",
-                archCycleSmellFile)
+                outputByClass = folderStr + "cycles-issues-by-class.csv",
+                outputByCycle = folderStr + "cycles-issues-by-cycle.csv",
+                issueFile = folderStr + "current-issues.csv",
+                cyclicDependencyFile = archCycleSmellFile)
     }
 
     /*
