@@ -5,6 +5,8 @@ import csv_model.extracted.SonarIssues
 import org.json.simple.JSONArray
 import org.json.simple.JSONObject
 import org.json.simple.parser.JSONParser
+import org.slf4j.Logger
+import org.slf4j.LoggerFactory
 import java.io.*
 import java.net.HttpURLConnection
 import java.net.URL
@@ -20,7 +22,7 @@ import java.io.File
 
 
 
-
+val LOG = LoggerFactory.getLogger("test")
 val parser = JSONParser()
 val sonarInstance = "http://sonar.inf.unibz.it"
 
@@ -30,7 +32,7 @@ private val MAX_ELASTICSEARCH_RESULTS = 10000
 fun main(args: Array<String>) {
 
     //val metricKeys = getMetricKeys()
-    val ruleKeys = getRuleKeys()
+    //val ruleKeys = getRuleKeys()
 
     //save current csv for QC projects
     val projectKeys = getProjectsContainingString("QC - check")//QC - aspectj, QC - jboss, QC - jtopen
@@ -39,7 +41,7 @@ fun main(args: Array<String>) {
     for (projectKey in projectKeys) {
         //create work folder
         val folderStr = "extraction/" + projectKey.replace("\\W".toRegex(),"-") + "/"
-        val folder = File(folderStr)
+        val folder = File(folderStr)/*
         if (folder.exists()) {
             if (!folder.deleteRecursively())
                 throw Exception("Could not delete ${folder.name} directory")
@@ -51,12 +53,13 @@ fun main(args: Array<String>) {
         val archCycleSmellFile = findArchitectureSmellFile(projectKey,"classCyclesShapeTable.csv")
 
         saveIssues(folderStr + "current-issues.csv", projectKey, "OPEN", ruleKeys)
-        //saveCurrentMeasuresAndIssues(folderStr + "current-measures-issues.csv", projectKey, metricKeys, ruleKeys)
         mergeArchitectureAndCodeIssues(
                 outputByClass = folderStr + "cycles-issues-by-class.csv",
                 outputByCycle = folderStr + "cycles-issues-by-cycle.csv",
                 issueFile = folderStr + "current-issues.csv",
                 cyclicDependencyFile = archCycleSmellFile)
+         */
+        runRscript(File("correlations.R"), folder)
     }
 
     /*
@@ -75,6 +78,18 @@ fun main(args: Array<String>) {
     //mergeFaultsAndSmells("git-commits.csv","jira-issues.csv", "issues.csv", "faults-and-smells.csv")
 
 
+}
+
+fun  runRscript(rFile: File, folder: File) {
+    rFile.copyTo(File(folder, rFile.name))
+    val pb = ProcessBuilder("C:\\Program Files\\R\\R-3.3.3\\bin\\x64\\Rscript.exe", rFile.name)
+            .directory(folder)
+            .redirectErrorStream(true)
+    val process = pb.start()
+    StreamGobbler(process.inputStream).start()
+    val returnCode = process.waitFor()
+    if (returnCode != 0)
+        throw Exception("Rscript.exe execution returned $returnCode")
 }
 
 fun  findArchitectureSmellFile(projectKey: String, fileName: String): File {
@@ -448,7 +463,7 @@ Parses an URL request as a string
  */
 fun getStringFromUrl(queryURL: String): String {
     assert(queryURL.length <= MAX_URL_LENGTH) // URLS over 2000 are not supported
-    println("\nSending 'GET' request to URL : " + queryURL)
+    ("\nSending 'GET' request to URL : " + queryURL)
     val url = URL(queryURL)
     val con = url.openConnection() as HttpURLConnection
     con.requestMethod = "GET"

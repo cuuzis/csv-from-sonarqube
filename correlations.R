@@ -2,17 +2,16 @@
 # Saves results in "correlations.csv".
 #
 # To run script from command line:
-# "C:\Program Files\R\R-3.3.3\bin\x64\Rscript.exe" myscript.R
+# "C:\Program Files\R\R-3.3.3\bin\x64\Rscript.exe" correlations.R
 
-data <- read.csv("architecture-and-sonar-issues.csv", header=T)
-mat <- matrix(c(data$arch.class.cyclic.occurrences, data$code_smells.long_method),nrow=length(data$arch.class.cyclic.occurrences))
+data <- read.csv("cycles-issues-by-class.csv", header=T)
 smell <- c()
 mannWhitneyP <- c()
 kendallP <- c()
 kendallTau <- c()
 for(i in 4:dim(data)[2]) {
  smell <- c(smell, colnames(data)[i])
- mat <- matrix(c(data$arch.class.cyclic.occurrences, data[,i]),nrow=length(data$arch.class.cyclic.occurrences))
+ mat <- matrix(c(data$arch.cycle.size, data[,i]),nrow=length(data$arch.cycle.size))
  pvalue <- wilcox.test(mat[,1],mat[,2])$p.value
  mannWhitneyP <- c(mannWhitneyP, pvalue)
  pval <- cor.test(mat[,1],mat[,2], method="kendall")$p.value
