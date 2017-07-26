@@ -32,16 +32,16 @@ private val MAX_ELASTICSEARCH_RESULTS = 10000
 fun main(args: Array<String>) {
 
     //val metricKeys = getMetricKeys()
-    //val ruleKeys = getRuleKeys()
+    val ruleKeys = getRuleKeys()
 
     //save current csv for QC projects
-    val projectKeys = getProjectsContainingString("QC - check")//QC - aspectj, QC - jboss, QC - jtopen
+    val projectKeys = getProjectsContainingString("QC - col")//QC - aspectj, QC - jboss, QC - jtopen
     println("Extracting data for ${projectKeys.size} projects")
 
     for (projectKey in projectKeys) {
         //create work folder
         val folderStr = "extraction/" + projectKey.replace("\\W".toRegex(),"-") + "/"
-        val folder = File(folderStr)/*
+        val folder = File(folderStr)
         if (folder.exists()) {
             if (!folder.deleteRecursively())
                 throw Exception("Could not delete ${folder.name} directory")
@@ -49,16 +49,15 @@ fun main(args: Array<String>) {
         if (!folder.mkdirs())
             throw Exception("Could not create ${folder.name} directory")
 
+        saveIssues(folderStr + "current-issues.csv", projectKey, "OPEN", ruleKeys)
+
         // read architecture smells
         val archCycleSmellFile = findArchitectureSmellFile(projectKey,"classCyclesShapeTable.csv")
-
-        saveIssues(folderStr + "current-issues.csv", projectKey, "OPEN", ruleKeys)
         mergeArchitectureAndCodeIssues(
                 outputByClass = folderStr + "cycles-issues-by-class.csv",
                 outputByCycle = folderStr + "cycles-issues-by-cycle.csv",
                 issueFile = folderStr + "current-issues.csv",
                 cyclicDependencyFile = archCycleSmellFile)
-         */
         runRscript(File("correlations.R"), folder)
     }
 
@@ -80,14 +79,19 @@ fun main(args: Array<String>) {
 
 }
 
+/**
+ * Runs 'Rscript.exe rFile' in the specified folder
+ */
 fun  runRscript(rFile: File, folder: File) {
-    rFile.copyTo(File(folder, rFile.name))
-    val pb = ProcessBuilder("C:\\Program Files\\R\\R-3.3.3\\bin\\x64\\Rscript.exe", rFile.name)
+    println("Calculating correlations for " + folder.name.split(File.separatorChar).last())
+    val scriptFile = rFile.copyTo(File(folder, rFile.name))
+    val pb = ProcessBuilder("C:\\Program Files\\R\\R-3.3.3\\bin\\x64\\Rscript.exe", scriptFile.name)
             .directory(folder)
             .redirectErrorStream(true)
+            .inheritIO()
     val process = pb.start()
-    StreamGobbler(process.inputStream).start()
     val returnCode = process.waitFor()
+    scriptFile.delete()
     if (returnCode != 0)
         throw Exception("Rscript.exe execution returned $returnCode")
 }

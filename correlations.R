@@ -3,21 +3,34 @@
 #
 # To run script from command line:
 # "C:\Program Files\R\R-3.3.3\bin\x64\Rscript.exe" correlations.R
+#
+#
+# Mann-Whitney test:
+#      p < 0.05  -->
+# Shapiro-Wilkinson Normality test:
+#      p > 0.05  -->  normal distribution      -->  use Pearson correlation
+#      p < 0.05  -->  not normal distribution  -->  use Kendall correlation
+# Kendall correlation:
+#      p < 0.05  -->
+# Pearson correlation:
+#      p < 0.05  -->
 
 data <- read.csv("cycles-issues-by-class.csv", header=T)
-smell <- c()
-mannWhitneyP <- c()
-kendallP <- c()
+issueName <- c()
+mannWhitneyPvalue <- c()
+shapiroWilkPvalue <- c()
+kendallPvalue <- c()
 kendallTau <- c()
-for(i in 4:dim(data)[2]) {
- smell <- c(smell, colnames(data)[i])
+pearsonPvalue <- c()
+pearsonCor <- c()
+for(i in 5:dim(data)[2]) {
+ issueName <- c(issueName, colnames(data)[i])
  mat <- matrix(c(data$arch.cycle.size, data[,i]),nrow=length(data$arch.cycle.size))
- pvalue <- wilcox.test(mat[,1],mat[,2])$p.value
- mannWhitneyP <- c(mannWhitneyP, pvalue)
- pval <- cor.test(mat[,1],mat[,2], method="kendall")$p.value
- kendallP <- c(kendallP, pval)
- tau <- (cor.test(mat[,1],mat[,2], method="kendall")$estimate["tau"])
- kendallTau <- c(kendallTau, tau)
+ mannWhitneyPvalue <- c(mannWhitneyPvalue, wilcox.test(mat[,1],mat[,2])$p.value)
+ kendallPvalue <- c(kendallPvalue, cor.test(mat[,1],mat[,2], method="kendall")$p.value)
+ kendallTau <- c(kendallTau, cor.test(mat[,1],mat[,2], method="kendall")$estimate["tau"])
+ pearsonPvalue <- c(pearsonPvalue, cor.test(mat[,1],mat[,2], method="pearson")$p.value)
+ pearsonCor <- c(pearsonCor, cor.test(mat[,1],mat[,2], method="pearson")$estimate["cor"])
 }
-outFrame <- data.frame(smell,mannWhitneyP,kendallP,kendallTau)
-write.csv(outFrame, file="correlations.csv", fileEncoding="UTF-8")
+outFrame <- data.frame(issueName,mannWhitneyPvalue,kendallPvalue,kendallTau,pearsonPvalue,pearsonCor)
+write.csv(outFrame, file="correlations.csv", fileEncoding="UTF-8", row.names=FALSE)
