@@ -27,10 +27,13 @@ for(i in 5:dim(data)[2]) {
  issueName <- c(issueName, colnames(data)[i])
  mat <- matrix(c(data$arch.cycle.size, data[,i]),nrow=length(data$arch.cycle.size))
  mannWhitneyPvalue <- c(mannWhitneyPvalue, wilcox.test(mat[,1],mat[,2])$p.value)
+ shapiroWilkPvalue <- tryCatch({
+  c(shapiroWilkPvalue, shapiro.test(mat[,2])$p.value) },
+  error = function(e) { c(shapiroWilkPvalue, 0) })
  kendallPvalue <- c(kendallPvalue, cor.test(mat[,1],mat[,2], method="kendall")$p.value)
  kendallTau <- c(kendallTau, cor.test(mat[,1],mat[,2], method="kendall")$estimate["tau"])
  pearsonPvalue <- c(pearsonPvalue, cor.test(mat[,1],mat[,2], method="pearson")$p.value)
  pearsonCor <- c(pearsonCor, cor.test(mat[,1],mat[,2], method="pearson")$estimate["cor"])
 }
-outFrame <- data.frame(issueName,mannWhitneyPvalue,kendallPvalue,kendallTau,pearsonPvalue,pearsonCor)
+outFrame <- data.frame(issueName,mannWhitneyPvalue,shapiroWilkPvalue,kendallPvalue,kendallTau,pearsonPvalue,pearsonCor)
 write.csv(outFrame, file="correlations.csv", fileEncoding="UTF-8", row.names=FALSE)

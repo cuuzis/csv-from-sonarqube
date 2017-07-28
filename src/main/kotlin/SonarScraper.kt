@@ -1,12 +1,11 @@
 import com.opencsv.CSVWriter
 import com.opencsv.bean.CsvToBeanBuilder
-import csv_model.extracted.ArchitectureSmells
+import com.opencsv.bean.StatefulBeanToCsvBuilder
 import csv_model.extracted.SonarIssues
+import csv_model.merged.Correlations
 import org.json.simple.JSONArray
 import org.json.simple.JSONObject
 import org.json.simple.parser.JSONParser
-import org.slf4j.Logger
-import org.slf4j.LoggerFactory
 import java.io.*
 import java.net.HttpURLConnection
 import java.net.URL
@@ -21,8 +20,6 @@ import java.io.FileWriter
 import java.io.File
 
 
-
-val LOG = LoggerFactory.getLogger("test")
 val parser = JSONParser()
 val sonarInstance = "http://sonar.inf.unibz.it"
 
@@ -30,17 +27,20 @@ private val MAX_URL_LENGTH = 2000
 private val MAX_ELASTICSEARCH_RESULTS = 10000
 
 fun main(args: Array<String>) {
+    val startTime = System.currentTimeMillis()
 
     //val metricKeys = getMetricKeys()
     val ruleKeys = getRuleKeys()
 
     //save current csv for QC projects
-    val projectKeys = getProjectsContainingString("QC - col")//QC - aspectj, QC - jboss, QC - jtopen
-    println("Extracting data for ${projectKeys.size} projects")
 
+    val projectKeys = getProjectsContainingString("QC -")//QC - aspectj, QC - jboss, QC - jtopen
+    val workDir = "extraction" + File.separatorChar
+
+    /*
     for (projectKey in projectKeys) {
-        //create work folder
-        val folderStr = "extraction/" + projectKey.replace("\\W".toRegex(),"-") + "/"
+        //create working folder
+        val folderStr = workDir + projectKey.replace("\\W".toRegex(),"-") + File.separatorChar
         val folder = File(folderStr)
         if (folder.exists()) {
             if (!folder.deleteRecursively())
@@ -51,15 +51,51 @@ fun main(args: Array<String>) {
 
         saveIssues(folderStr + "current-issues.csv", projectKey, "OPEN", ruleKeys)
 
-        // read architecture smells
+
         val archCycleSmellFile = findArchitectureSmellFile(projectKey,"classCyclesShapeTable.csv")
         mergeArchitectureAndCodeIssues(
                 outputByClass = folderStr + "cycles-issues-by-class.csv",
                 outputByCycle = folderStr + "cycles-issues-by-cycle.csv",
                 issueFile = folderStr + "current-issues.csv",
                 cyclicDependencyFile = archCycleSmellFile)
+        //runRscript(File("correlations.R"), folder)
+    }*/
+
+    // calculate correlations
+    for (projectKey in projectKeys) {
+        val folderStr = workDir + projectKey.replace("\\W".toRegex(), "-") + File.separatorChar
+        val folder = File(folderStr)
         runRscript(File("correlations.R"), folder)
     }
+
+    // merge correlation files together
+    print("Merging correlation files")
+    val mergeTime = System.currentTimeMillis()
+    val allCorrelations = mutableListOf<Correlations>()
+    for (projectKey in projectKeys) {
+        val folderStr = workDir + projectKey.replace("\\W".toRegex(),"-") + File.separatorChar
+        val correlationBeans =
+                CsvToBeanBuilder<Correlations>(FileReader(File(folderStr + File.separatorChar + "correlations.csv")))
+                .withType(Correlations::class.java).build().parse()
+                .map { it as Correlations }
+        correlationBeans.mapTo(allCorrelations) {
+            Correlations(
+                    projectName = projectKey,
+                    issueName = it.issueName,
+                    mannWhitneyPvalue = it.mannWhitneyPvalue,
+                    shapiroWilkPvalue = it.shapiroWilkPvalue,
+                    kendallPvalue = it.kendallPvalue,
+                    kendallTau = it.kendallTau,
+                    pearsonPvalue = it.pearsonPvalue,
+                    pearsonCor = it.pearsonCor)
+        }
+    }
+    FileWriter("correlations.csv").use { fileWriter ->
+        val beanToCsv = StatefulBeanToCsvBuilder<Correlations>(fileWriter).build()
+        allCorrelations.forEach { row -> beanToCsv.write(row) }
+    }
+    println(" (done in ${(System.currentTimeMillis()-mergeTime)/1000.0} seconds)")
+
 
     /*
     //save history csv for "org.apache:commons-cli"
@@ -76,14 +112,15 @@ fun main(args: Array<String>) {
     */
     //mergeFaultsAndSmells("git-commits.csv","jira-issues.csv", "issues.csv", "faults-and-smells.csv")
 
-
+    println("Execution completed in ${(System.currentTimeMillis()-startTime)/1000.0} seconds (${(System.currentTimeMillis() - startTime)/60000} minutes)")
 }
 
 /**
  * Runs 'Rscript.exe rFile' in the specified folder
  */
 fun  runRscript(rFile: File, folder: File) {
-    println("Calculating correlations for " + folder.name.split(File.separatorChar).last())
+    println("Running '${rFile.name}' on " + folder.name.split(File.separatorChar).last())
+    val startTime = System.currentTimeMillis()
     val scriptFile = rFile.copyTo(File(folder, rFile.name))
     val pb = ProcessBuilder("C:\\Program Files\\R\\R-3.3.3\\bin\\x64\\Rscript.exe", scriptFile.name)
             .directory(folder)
@@ -94,6 +131,7 @@ fun  runRscript(rFile: File, folder: File) {
     scriptFile.delete()
     if (returnCode != 0)
         throw Exception("Rscript.exe execution returned $returnCode")
+    println("R script done in ${(System.currentTimeMillis() - startTime)/1000.0} seconds)")
 }
 
 fun  findArchitectureSmellFile(projectKey: String, fileName: String): File {
@@ -129,6 +167,7 @@ fun  getInstantFromSonarDate(sonarDate: String): Instant {
 Returns a list of project keys containing a string
  */
 fun  getProjectsContainingString(partOfName: String): List<String> {
+    println("Requesting keys for projects containing '$partOfName'")
     val query = "http://sonar.inf.unibz.it/api/components/search" +
             "?qualifiers=TRK" +
             "&ps=1000" +
@@ -277,10 +316,11 @@ private fun saveNonemptyPastMeasures(fileName: String, projectKey: String, metri
     }
 }
 
-/*
-Returns all metrics available on the server
+/**
+ * Returns all metrics available on the server
  */
 private fun getMetricKeys(): List<String> {
+    println("Requesting metric keys")
     val metricsQuery = "$sonarInstance/api/metrics/search?ps=1000"
     val metricsResult = getStringFromUrl(metricsQuery)
     val metricsObject = parser.parse(metricsResult) as JSONObject
@@ -338,7 +378,8 @@ private fun saveMeasureHistory(fileName: String, projectKey: String, metricKeys:
 Saves issue history for a project in a .csv file
  */
 private fun saveIssues(fileName: String, projectKey: String, statuses: String, ruleKeys: List<String>) {
-
+    print("Extracting issues for " + projectKey)
+    val startTime = System.currentTimeMillis()
     val header = listOf("creation-date", "update-date", "rule", "component")
     val rows = mutableListOf<List<String>>()
     rows.add(header)
@@ -350,7 +391,7 @@ private fun saveIssues(fileName: String, projectKey: String, statuses: String, r
     FileWriter(fileName).use { fw ->
         val csvWriter = CSVWriter(fw)
         csvWriter.writeAll(rows.map { it.toTypedArray() })
-        println("Sonarqube issues saved to $fileName")
+        println("Sonarqube issues saved to $fileName, extraction took ${(System.currentTimeMillis()-startTime)/1000.0} seconds")
     }
 }
 
@@ -438,10 +479,11 @@ fun splitIntoBatches(list: List<String>, batchSize: Int): List<List<String>> {
     return result
 }
 
-/*
-Get a list of rule keys for language java
+/**
+ * Get a list of rule keys for java language
  */
 private fun getRuleKeys(): List<String> {
+    println("Requesting rule keys for java")
     val result = mutableListOf<String>()
     val pageSize = 500
     var page = 0
@@ -467,12 +509,13 @@ Parses an URL request as a string
  */
 fun getStringFromUrl(queryURL: String): String {
     assert(queryURL.length <= MAX_URL_LENGTH) // URLS over 2000 are not supported
-    ("\nSending 'GET' request to URL : " + queryURL)
+    println("Sending 'GET' request to URL: " + queryURL)
     val url = URL(queryURL)
     val con = url.openConnection() as HttpURLConnection
     con.requestMethod = "GET"
     val responseCode = con.responseCode
-    println("Response Code : " + responseCode)
+    if (responseCode != 200)
+        throw Exception("Response Code : " + responseCode)
 
     val `in` = BufferedReader(InputStreamReader(con.inputStream))
     val stringBuilder = StringBuilder()

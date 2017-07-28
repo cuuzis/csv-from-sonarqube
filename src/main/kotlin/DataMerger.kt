@@ -164,6 +164,8 @@ fun mergeFaultsAndSmells(commitFile: String, faultFile: String, issuesFile: Stri
  *     C         1          -
  */
 fun mergeArchitectureAndCodeIssues(outputByClass: String, outputByCycle: String, issueFile: String, cyclicDependencyFile: File) {
+    println("Merging code and architecture issues")
+    val startTime = System.currentTimeMillis()
     // read code smells
     val issueBeans = CsvToBeanBuilder<SonarIssues>(FileReader(File(issueFile)))
             .withType(SonarIssues::class.java).build().parse()
@@ -280,4 +282,5 @@ fun mergeArchitectureAndCodeIssues(outputByClass: String, outputByCycle: String,
     }
 
     println("Architectural and code issues saved to $outputByClass and $outputByCycle")
+    println("Merging took ${(System.currentTimeMillis()-startTime)/1000.0} seconds")
 }
