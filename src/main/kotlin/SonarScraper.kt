@@ -1,8 +1,6 @@
 import com.opencsv.CSVWriter
 import com.opencsv.bean.CsvToBeanBuilder
-import com.opencsv.bean.StatefulBeanToCsvBuilder
 import csv_model.extracted.SonarIssues
-import csv_model.merged.Correlations
 import org.json.simple.JSONArray
 import org.json.simple.JSONObject
 import org.json.simple.parser.JSONParser
@@ -18,10 +16,12 @@ import java.util.*
 import java.io.FileReader
 import java.io.FileWriter
 import java.io.File
+import com.opencsv.CSVReader
 
 
 val parser = JSONParser()
 val sonarInstance = "http://sonar.inf.unibz.it"
+val workDir = "extraction" + File.separatorChar
 
 private val MAX_URL_LENGTH = 2000
 private val MAX_ELASTICSEARCH_RESULTS = 10000
@@ -30,27 +30,15 @@ fun main(args: Array<String>) {
     val startTime = System.currentTimeMillis()
 
     //val metricKeys = getMetricKeys()
-    val ruleKeys = getRuleKeys()
-
-    //save current csv for QC projects
+    //val ruleKeys = getRuleKeys()
 
     val projectKeys = getProjectsContainingString("QC -")//QC - aspectj, QC - jboss, QC - jtopen
-    val workDir = "extraction" + File.separatorChar
 
     /*
     for (projectKey in projectKeys) {
-        //create working folder
-        val folderStr = workDir + projectKey.replace("\\W".toRegex(),"-") + File.separatorChar
-        val folder = File(folderStr)
-        if (folder.exists()) {
-            if (!folder.deleteRecursively())
-                throw Exception("Could not delete ${folder.name} directory")
-        }
-        if (!folder.mkdirs())
-            throw Exception("Could not create ${folder.name} directory")
-
+        val folderStr = getProjectFolder(projectKey)
+        makeEmptyFolder(folderStr)
         saveIssues(folderStr + "current-issues.csv", projectKey, "OPEN", ruleKeys)
-
 
         val archCycleSmellFile = findArchitectureSmellFile(projectKey,"classCyclesShapeTable.csv")
         mergeArchitectureAndCodeIssues(
@@ -58,43 +46,19 @@ fun main(args: Array<String>) {
                 outputByCycle = folderStr + "cycles-issues-by-cycle.csv",
                 issueFile = folderStr + "current-issues.csv",
                 cyclicDependencyFile = archCycleSmellFile)
-        //runRscript(File("correlations.R"), folder)
-    }*/
+    }
 
     // calculate correlations
     for (projectKey in projectKeys) {
-        val folderStr = workDir + projectKey.replace("\\W".toRegex(), "-") + File.separatorChar
-        val folder = File(folderStr)
+        val folder = File(getProjectFolder(projectKey))
         runRscript(File("correlations.R"), folder)
     }
 
-    // merge correlation files together
-    print("Merging correlation files")
-    val mergeTime = System.currentTimeMillis()
-    val allCorrelations = mutableListOf<Correlations>()
-    for (projectKey in projectKeys) {
-        val folderStr = workDir + projectKey.replace("\\W".toRegex(),"-") + File.separatorChar
-        val correlationBeans =
-                CsvToBeanBuilder<Correlations>(FileReader(File(folderStr + File.separatorChar + "correlations.csv")))
-                .withType(Correlations::class.java).build().parse()
-                .map { it as Correlations }
-        correlationBeans.mapTo(allCorrelations) {
-            Correlations(
-                    projectName = projectKey,
-                    issueName = it.issueName,
-                    mannWhitneyPvalue = it.mannWhitneyPvalue,
-                    shapiroWilkPvalue = it.shapiroWilkPvalue,
-                    kendallPvalue = it.kendallPvalue,
-                    kendallTau = it.kendallTau,
-                    pearsonPvalue = it.pearsonPvalue,
-                    pearsonCor = it.pearsonCor)
-        }
-    }
-    FileWriter("correlations.csv").use { fileWriter ->
-        val beanToCsv = StatefulBeanToCsvBuilder<Correlations>(fileWriter).build()
-        allCorrelations.forEach { row -> beanToCsv.write(row) }
-    }
-    println(" (done in ${(System.currentTimeMillis()-mergeTime)/1000.0} seconds)")
+*/
+    mergeExtractedSameCsvFiles("correlations-by-project.csv", projectKeys, "correlations.csv")
+    mergeExtractedCsvFiles(projectKeys, "cycles-issues-by-class.csv")
+    // run correlations on all project issues
+    //runRscript(File("correlations.R"), File(workDir))
 
 
     /*
@@ -113,6 +77,87 @@ fun main(args: Array<String>) {
     //mergeFaultsAndSmells("git-commits.csv","jira-issues.csv", "issues.csv", "faults-and-smells.csv")
 
     println("Execution completed in ${(System.currentTimeMillis()-startTime)/1000.0} seconds (${(System.currentTimeMillis() - startTime)/60000} minutes)")
+}
+
+/**
+ * Merges together extracted csv files for projects.
+ */
+private fun mergeExtractedCsvFiles(projectKeys: List<String>, csvFilename: String) {
+    println("Merging $csvFilename")
+    // extract all column names occurring in files
+    val columnNames = mutableSetOf<String>()
+    for (projectKey in projectKeys) {
+        val reader = CSVReader(FileReader(getProjectFolder(projectKey) + csvFilename))
+        val header = reader.readNext()
+        columnNames.addAll(header)
+    }
+    val result = mutableListOf<Array<String>>()
+    result.add(columnNames.toTypedArray())
+    for (projectKey in projectKeys) {
+        // map column indexes
+        val reader = CSVReader(FileReader(getProjectFolder(projectKey) + csvFilename))
+        val header = reader.readNext()
+        val mappedPositions = mutableMapOf<Int,Int>()
+        for ((index, column) in header.withIndex())
+            mappedPositions.put(index, columnNames.indexOf(column))
+        // save mapped values, put "0" if column does not exist
+        val csvRows: List<Array<String>> = reader.readAll()
+        for (csvRow in csvRows) {
+            val row = Array<String>(columnNames.size, { _ -> "0"})
+            for ((index, value) in csvRow.withIndex())
+                row[mappedPositions[index]!!] = value
+            result.add(row)
+        }
+    }
+    // save data to file
+    FileWriter(workDir + csvFilename).use { fw ->
+        val csvWriter = CSVWriter(fw)
+        csvWriter.writeAll(result)
+    }
+}
+
+/**
+ * Merges extracted csv files for projects, provided the files have the same columns.
+ */
+private fun mergeExtractedSameCsvFiles(outputFile: String, projectKeys: List<String>, csvFilename: String) {
+    println("Merging $csvFilename")
+    BufferedWriter(FileWriter(workDir + outputFile)).use { bw ->
+        var commonHeader: String? = null
+        for (projectKey in projectKeys) {
+            val allFile = readListFromFile(getProjectFolder(projectKey) + csvFilename)
+            val header = allFile[0]
+            val rows = allFile.subList(1,allFile.size)
+            if (commonHeader == null) {
+                commonHeader = header
+                bw.write(commonHeader)
+                bw.newLine()
+            }
+            if (header != commonHeader) {
+                throw Exception("Files to merge have different columns" +
+                        "\nexpected: $commonHeader" +
+                        "\n$projectKey: $header")
+            }
+            rows.forEach { row ->
+                bw.write(row)
+                bw.newLine()
+            }
+        }
+    }
+}
+
+
+/**
+ * Creates an empty folder at the specified directory.
+ * If the specified folder already exists its contents are deleted.
+ */
+private fun makeEmptyFolder(directoryStr: String) {
+    val folder = File(directoryStr)
+    if (folder.exists()) {
+        if (!folder.deleteRecursively())
+            throw Exception("Could not delete ${folder.name} directory")
+    }
+    if (!folder.mkdirs())
+        throw Exception("Could not create ${folder.name} directory")
 }
 
 /**
@@ -141,6 +186,10 @@ fun  findArchitectureSmellFile(projectKey: String, fileName: String): File {
                 architectureRoot.name + File.separatorChar + projectKey.removePrefix("QC:").toLowerCase())
     }!!
     return architectureFolder.listFiles().find { it.name == fileName}!!
+}
+
+fun getProjectFolder(projectKey: String): String {
+    return workDir + projectKey.replace("\\W".toRegex(),"-") + File.separatorChar
 }
 
 /*
