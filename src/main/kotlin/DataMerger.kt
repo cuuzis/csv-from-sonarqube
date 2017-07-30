@@ -5,7 +5,8 @@ import java.io.File
 import java.io.FileReader
 import java.io.FileWriter
 import com.opencsv.bean.StatefulBeanToCsvBuilder
-import csv_model.extracted.ArchitectureSmells
+import csv_model.architecture_smells.ArchClassCycles
+import csv_model.architecture_smells.ArchMultiA
 import csv_model.extracted.GitCommits
 import csv_model.extracted.JiraFaults
 import csv_model.merged.MergedIssues
@@ -164,7 +165,7 @@ fun mergeFaultsAndSmells(commitFile: String, faultFile: String, issuesFile: Stri
  *     C         1          -
  */
 fun mergeArchitectureAndCodeIssues(outputByClass: String, outputByCycle: String, issueFile: String, cyclicDependencyFile: File) {
-    println("Merging code and architecture issues")
+    println("Merging cyclic dependencies and sonar issues")
     val startTime = System.currentTimeMillis()
     // read code smells
     val issueBeans = CsvToBeanBuilder<SonarIssues>(FileReader(File(issueFile)))
@@ -175,23 +176,24 @@ fun mergeArchitectureAndCodeIssues(outputByClass: String, outputByCycle: String,
     issueBeans.mapTo(issueRuleKeys) { it.ruleKey.orEmpty() }
 
     // read architectural smells
-    val archSmellBeans = CsvToBeanBuilder<ArchitectureSmells>(FileReader(cyclicDependencyFile))
-            .withType(ArchitectureSmells::class.java).build().parse()
-            .map { it as ArchitectureSmells }
+    val archSmellBeans = CsvToBeanBuilder<ArchClassCycles>(FileReader(cyclicDependencyFile))
+            .withType(ArchClassCycles::class.java).build().parse()
+            .map { it as ArchClassCycles }
 
 
     val header = listOf<String>(
             "cycle-ids",
             "component",
             "arch-cycle-size",
-            "arch-cycle-classes") +
+            "arch-cycle-classes",
+            "arch-cycle-exists") +
             issueRuleKeys.toList()
     val rows = mutableListOf<List<String>>()
     rows.add(header)
 
     // add all sonar issues and match architectural smells to them
     for (sonarIssue in issueBeans.distinctBy { it.component }) {
-        val archSmellOccurences = archSmellBeans
+        val archSmellOccurrences = archSmellBeans
                 .flatMap { it.getComponentList() }
                 .count { sonarIssue.component.orEmpty().endsWith(it) }
         val archSmellComponents = archSmellBeans
@@ -203,11 +205,17 @@ fun mergeArchitectureAndCodeIssues(outputByClass: String, outputByCycle: String,
                     }
                     contains
                 }
+        val archSmellExists =
+                if (archSmellOccurrences == 0 && archSmellComponents.count() == 0)
+                    "0"
+                else
+                    "1"
         val row = mutableListOf<String>(
                 archSmellComponents.map { it.cycleId }.joinToString(";"),
                 sonarIssue.component.orEmpty(),
-                archSmellOccurences.toString(),
-                archSmellComponents.count().toString())
+                archSmellOccurrences.toString(),
+                archSmellComponents.count().toString(),
+                archSmellExists)
         for (issueRuleKey in issueRuleKeys) {
             val sonarIssues = issueBeans.filter { it.component == sonarIssue.component && it.ruleKey == issueRuleKey }
                     .count()
@@ -225,7 +233,7 @@ fun mergeArchitectureAndCodeIssues(outputByClass: String, outputByCycle: String,
             }.distinct()
     //copy pasta:
     for (noIssueComponent in archSmellsWithNoIssues) {
-        val archSmellOccurences = archSmellBeans
+        val archSmellOccurrences = archSmellBeans
                 .flatMap { it.getComponentList() }
                 .count { noIssueComponent.orEmpty().endsWith(it) }
         val archSmellComponents = archSmellBeans
@@ -240,8 +248,9 @@ fun mergeArchitectureAndCodeIssues(outputByClass: String, outputByCycle: String,
         val row = mutableListOf(
                 archSmellComponents.map { it.cycleId }.joinToString(";"),
                 noIssueComponent.orEmpty(),
-                archSmellOccurences.toString(),
-                archSmellComponents.count().toString())
+                archSmellOccurrences.toString(),
+                archSmellComponents.count().toString(),
+                "0")
         issueRuleKeys.forEach { row.add("0") }
         rows.add(row)
     }
@@ -253,7 +262,13 @@ fun mergeArchitectureAndCodeIssues(outputByClass: String, outputByCycle: String,
 
 
     // group by cycles
-    val rowsByCycles = mutableListOf(header)
+    val headerByCycles = listOf<String>(
+            "cycle-ids",
+            "component",
+            "arch-cycle-size",
+            "arch-cycle-classes") +
+            issueRuleKeys.toList()
+    val rowsByCycles = mutableListOf(headerByCycles)
     for (archSmell in archSmellBeans) {
         val affectedClasses = archSmell.getComponentList()
         val relatedIssues = issueBeans.filter { issue ->
@@ -281,6 +296,73 @@ fun mergeArchitectureAndCodeIssues(outputByClass: String, outputByCycle: String,
         csvWriter.writeAll(rowsByCycles.map { it.toTypedArray() })
     }
 
-    println("Architectural and code issues saved to $outputByClass and $outputByCycle")
+    println("Cyclic dependencies and sonar issues saved to $outputByClass and $outputByCycle")
+    println("Merging took ${(System.currentTimeMillis()-startTime)/1000.0} seconds")
+}
+
+/**
+ * Merges architecture MAS and code issues by packages
+ */
+fun mergeArchMasAndCodeIssues(outputFile: String, issueFile: String, masFile: File) {
+    println("Merging MAS and sonar issues")
+    val startTime = System.currentTimeMillis()
+    // read code smells
+    val issueBeans = CsvToBeanBuilder<SonarIssues>(FileReader(File(issueFile)))
+            .withType(SonarIssues::class.java).build().parse()
+            .map { it as SonarIssues }
+
+    val issueRuleKeys = sortedSetOf<String>()
+    issueBeans.mapTo(issueRuleKeys) { it.ruleKey.orEmpty() }
+
+    // read architectural smells
+    val archSmellBeans = CsvToBeanBuilder<ArchMultiA>(FileReader(masFile))
+            .withType(ArchMultiA::class.java).build().parse()
+            .map { it as ArchMultiA }
+
+
+    val header = listOf<String>(
+            "package",
+            "ud",
+            "hl",
+            "cd",
+            "ud-hl-cd-exists") +
+            issueRuleKeys.toList()
+    val rows = mutableListOf<List<String>>()
+    rows.add(header)
+
+    // group by mas
+    val validArchSmells = archSmellBeans.filterNot {
+        val packageName = it.name.orEmpty().replaceAfter("\$", "").replace("\$","")
+        packageName.startsWith("java.") || packageName.startsWith("javax.") || packageName.length < 3
+    }
+    for (archSmell in validArchSmells) {
+        val relatedIssues = issueBeans.filter { issue ->
+            val packageStr = archSmell.name.orEmpty().replace(".","/")
+            issue.component.orEmpty().contains(packageStr)
+        }
+        val archSmellExists =
+                if (archSmell.ud.orEmpty() == "0" && archSmell.hl.orEmpty() == "0" && archSmell.cd.orEmpty() == "0")
+                    "0"
+                else
+                    "1"
+        val row = mutableListOf<String>(
+                archSmell.name.orEmpty(),
+                archSmell.ud.orEmpty(),
+                archSmell.hl.orEmpty(),
+                archSmell.cd.orEmpty(),
+                archSmellExists)
+        for (issueRuleKey in issueRuleKeys) {
+            val sonarIssues = relatedIssues.count { it.ruleKey == issueRuleKey }
+            row.add(sonarIssues.toString())
+        }
+        rows.add(row)
+    }
+
+    FileWriter(outputFile).use { fw ->
+        val csvWriter = CSVWriter(fw)
+        csvWriter.writeAll(rows.map { it.toTypedArray() })
+    }
+
+    println("MAS and sonar issues saved to $outputFile")
     println("Merging took ${(System.currentTimeMillis()-startTime)/1000.0} seconds")
 }

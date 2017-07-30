@@ -32,14 +32,20 @@ fun main(args: Array<String>) {
     //val metricKeys = getMetricKeys()
     //val ruleKeys = getRuleKeys()
 
-    val projectKeys = getProjectsContainingString("QC -")//QC - aspectj, QC - jboss, QC - jtopen
+    val projectKeys = getProjectsContainingString("QC - q")//QC - aspectj, QC - jboss, QC - jtopen
 
     /*
+    // extract issues
     for (projectKey in projectKeys) {
         val folderStr = getProjectFolder(projectKey)
         makeEmptyFolder(folderStr)
         saveIssues(folderStr + "current-issues.csv", projectKey, "OPEN", ruleKeys)
+    }
+    */
 
+    // arch cycle smells
+    for (projectKey in projectKeys) {
+        val folderStr = getProjectFolder(projectKey)
         val archCycleSmellFile = findArchitectureSmellFile(projectKey,"classCyclesShapeTable.csv")
         mergeArchitectureAndCodeIssues(
                 outputByClass = folderStr + "cycles-issues-by-class.csv",
@@ -48,15 +54,28 @@ fun main(args: Array<String>) {
                 cyclicDependencyFile = archCycleSmellFile)
     }
 
+    // arch MAS smells
+    for (projectKey in projectKeys) {
+        val folderStr = getProjectFolder(projectKey)
+        val archMasFile = findArchitectureSmellFile(projectKey,"mas.csv")
+        mergeArchMasAndCodeIssues(
+                outputFile = folderStr + "mas-issues-by-package.csv",
+                issueFile = folderStr + "current-issues.csv",
+                masFile = archMasFile)
+    }
+
+    /*
     // calculate correlations
     for (projectKey in projectKeys) {
         val folder = File(getProjectFolder(projectKey))
         runRscript(File("correlations.R"), folder)
     }
+    */
 
-*/
-    mergeExtractedSameCsvFiles("correlations-by-project.csv", projectKeys, "correlations.csv")
+    //mergeExtractedSameCsvFiles("correlations-by-project.csv", projectKeys, "correlations.csv")
     mergeExtractedCsvFiles(projectKeys, "cycles-issues-by-class.csv")
+    mergeExtractedCsvFiles(projectKeys, "cycles-issues-by-cycle.csv")
+    mergeExtractedCsvFiles(projectKeys, "mas-issues-by-package.csv")
     // run correlations on all project issues
     //runRscript(File("correlations.R"), File(workDir))
 

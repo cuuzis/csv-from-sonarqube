@@ -1,8 +1,8 @@
-package csv_model.extracted
+package csv_model.architecture_smells
 
 import com.opencsv.bean.CsvBindByName
 
-class ArchitectureSmells(
+class ArchClassCycles(
         @CsvBindByName(column = "IdCycle") val cycleId: String? = null,
         @CsvBindByName(column = "numVertices") val numVertices: String? = null,
         @CsvBindByName(column = "ElementList") val elementList: String? = null) {
