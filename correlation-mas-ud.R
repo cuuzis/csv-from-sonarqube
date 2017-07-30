@@ -30,10 +30,12 @@ for(i in 6:dim(data)[2]) {
  shapiroWilkPvalue <- tryCatch({
   c(shapiroWilkPvalue, shapiro.test(mat[,2])$p.value) },
   error = function(e) { c(shapiroWilkPvalue, 0) })
- kendallPvalue <- c(kendallPvalue, cor.test(mat[,1],mat[,2], method="kendall")$p.value)
- kendallTau <- c(kendallTau, cor.test(mat[,1],mat[,2], method="kendall")$estimate["tau"])
- pearsonPvalue <- c(pearsonPvalue, cor.test(mat[,1],mat[,2], method="pearson")$p.value)
- pearsonCor <- c(pearsonCor, cor.test(mat[,1],mat[,2], method="pearson")$estimate["cor"])
+ kendall <- cor.test(mat[,1],mat[,2], method="kendall")
+ kendallPvalue <- c(kendallPvalue, kendall$p.value)
+ kendallTau <- c(kendallTau, kendall$estimate["tau"])
+ pearson <- cor.test(mat[,1],mat[,2], method="pearson")
+ pearsonPvalue <- c(pearsonPvalue, pearson$p.value)
+ pearsonCor <- c(pearsonCor, pearson$estimate["cor"])
 }
 outFrame <- data.frame(issueName,mannWhitneyPvalue,shapiroWilkPvalue,kendallPvalue,kendallTau,pearsonPvalue,pearsonCor)
 write.csv(outFrame, file="correlation-mas-ud.csv", fileEncoding="UTF-8", row.names=FALSE)

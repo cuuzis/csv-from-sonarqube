@@ -28,11 +28,10 @@ private val MAX_ELASTICSEARCH_RESULTS = 10000
 
 fun main(args: Array<String>) {
     val startTime = System.currentTimeMillis()
-
     //val metricKeys = getMetricKeys()
     //val ruleKeys = getRuleKeys()
 
-    val projectKeys = getProjectsContainingString("QC -")//QC - aspectj, QC - jboss, QC - jtopen
+    //val projectKeys = getProjectsContainingString("QC -")//QC - aspectj, QC - jboss, QC - jtopen
 
     /*
     // extract issues, takes long
@@ -42,7 +41,7 @@ fun main(args: Array<String>) {
         saveIssues(folderStr + "current-issues.csv", projectKey, "OPEN", ruleKeys)
     }
     */
-
+    /*
     // map sonar issues to arch cycle smells, takes ~2h30m
     for (projectKey in projectKeys) {
         val folderStr = getProjectFolder(projectKey)
@@ -53,9 +52,8 @@ fun main(args: Array<String>) {
                 issueFile = folderStr + "current-issues.csv",
                 cyclicDependencyFile = archCycleSmellFile)
     }
-
-
-
+    */
+    /*
     // map sonar issues to arch MAS smells, takes ~40m
     for (projectKey in projectKeys) {
         val folderStr = getProjectFolder(projectKey)
@@ -65,10 +63,10 @@ fun main(args: Array<String>) {
                 issueFile = folderStr + "current-issues.csv",
                 masFile = archMasFile)
     }
-
-
+    */
+    /*
     // calculate correlations, takes ~30m
-    for (projectKey in projectKeys) {
+    projectKeys.parallelStream().forEach { projectKey ->
         val folder = File(getProjectFolder(projectKey))
         runRscript(File("correlation-cycle-size.R"), folder)
         runRscript(File("correlation-cycle-classes.R"), folder)
@@ -78,8 +76,10 @@ fun main(args: Array<String>) {
         runRscript(File("correlation-mas-cd.R"), folder)
         runRscript(File("correlation-mas-exists.R"), folder)
     }
+    */
 
-    // merge correlation values from projects
+/*
+    // merge correlation values from projects (~1s)
     mergeExtractedSameCsvFiles(projectKeys, "correlation-cycle-size.csv")
     mergeExtractedSameCsvFiles(projectKeys, "correlation-cycle-classes.csv")
     mergeExtractedSameCsvFiles(projectKeys, "correlation-cycle-exists.csv")
@@ -87,14 +87,15 @@ fun main(args: Array<String>) {
     mergeExtractedSameCsvFiles(projectKeys, "correlation-mas-hl.csv")
     mergeExtractedSameCsvFiles(projectKeys, "correlation-mas-cd.csv")
     mergeExtractedSameCsvFiles(projectKeys, "correlation-mas-exists.csv")
-
-    // merge architecture smells for projects...
+    */
+    /*
+    // merge architecture smells for projects (~30s)...
     mergeExtractedCsvFiles(projectKeys, "cycles-issues-by-class.csv")
     mergeExtractedCsvFiles(projectKeys, "cycles-issues-by-cycle.csv")
     mergeExtractedCsvFiles(projectKeys, "mas-issues-by-package.csv")
-
-    // ...and calculate correlations, takes very long time:
+    */
     /*
+    // ...and calculate correlations, takes very long time (188 columns, for each: ~2min cycle, ~7min mas):
     runRscript(File("correlation-cycle-size.R"), File(workDir))
     runRscript(File("correlation-cycle-classes.R"), File(workDir))
     runRscript(File("correlation-cycle-exists.R"), File(workDir))
@@ -103,6 +104,16 @@ fun main(args: Array<String>) {
     runRscript(File("correlation-mas-cd.R"), File(workDir))
     runRscript(File("correlation-mas-exists.R"), File(workDir))
     */
+    //v2, mas file is shrunk:
+    val rFileList = listOf(
+            "correlation-cycle-size.R",
+            "correlation-cycle-classes.R",
+            "correlation-cycle-exists.R",
+            "correlation-mas-ud.R",
+            "correlation-mas-hl.R",
+            "correlation-mas-cd.R",
+            "correlation-mas-exists.R")
+    rFileList.parallelStream().forEach { rFile -> runRscript(File(rFile), File(workDir)) }
 
     /*
     //save history csv for "org.apache:commons-cli"
@@ -209,7 +220,7 @@ private fun makeEmptyFolder(directoryStr: String) {
 fun  runRscript(rFile: File, folder: File) {
     println("Running '${rFile.name}' on " + folder.name.split(File.separatorChar).last())
     val startTime = System.currentTimeMillis()
-    val scriptFile = rFile.copyTo(File(folder, rFile.name))
+    val scriptFile = rFile.copyTo(File(folder, rFile.name), overwrite = true)
     val pb = ProcessBuilder("C:\\Program Files\\R\\R-3.3.3\\bin\\x64\\Rscript.exe", scriptFile.name)
             .directory(folder)
             .redirectErrorStream(true)
@@ -219,7 +230,8 @@ fun  runRscript(rFile: File, folder: File) {
     scriptFile.delete()
     if (returnCode != 0)
         throw Exception("Rscript.exe execution returned $returnCode")
-    println("R script done in ${(System.currentTimeMillis() - startTime)/1000.0} seconds)")
+    println("R script '${rFile.name}' on ${folder.name.split(File.separatorChar).last()}" +
+            " done in ${(System.currentTimeMillis() - startTime)/1000.0} seconds)")
 }
 
 fun  findArchitectureSmellFile(projectKey: String, fileName: String): File {
