@@ -23,9 +23,9 @@ kendallPvalue <- c()
 kendallTau <- c()
 pearsonPvalue <- c()
 pearsonCor <- c()
-for(i in 5:dim(data)[2]) {
+for(i in 6:dim(data)[2]) {
  issueName <- c(issueName, colnames(data)[i])
- mat <- matrix(c(data$arch.cycle.size, data[,i]),nrow=length(data$arch.cycle.size))
+ mat <- matrix(c(data$arch.cycle.exists, data[,i]),nrow=length(data$arch.cycle.exists))
  mannWhitneyPvalue <- c(mannWhitneyPvalue, wilcox.test(mat[,1],mat[,2])$p.value)
  shapiroWilkPvalue <- tryCatch({
   c(shapiroWilkPvalue, shapiro.test(mat[,2])$p.value) },
@@ -36,4 +36,4 @@ for(i in 5:dim(data)[2]) {
  pearsonCor <- c(pearsonCor, cor.test(mat[,1],mat[,2], method="pearson")$estimate["cor"])
 }
 outFrame <- data.frame(issueName,mannWhitneyPvalue,shapiroWilkPvalue,kendallPvalue,kendallTau,pearsonPvalue,pearsonCor)
-write.csv(outFrame, file="correlations.csv", fileEncoding="UTF-8", row.names=FALSE)
+write.csv(outFrame, file="correlation-cycle-exists.csv", fileEncoding="UTF-8", row.names=FALSE)

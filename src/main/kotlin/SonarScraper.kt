@@ -32,10 +32,10 @@ fun main(args: Array<String>) {
     //val metricKeys = getMetricKeys()
     //val ruleKeys = getRuleKeys()
 
-    val projectKeys = getProjectsContainingString("QC - q")//QC - aspectj, QC - jboss, QC - jtopen
+    val projectKeys = getProjectsContainingString("QC -")//QC - aspectj, QC - jboss, QC - jtopen
 
     /*
-    // extract issues
+    // extract issues, takes long
     for (projectKey in projectKeys) {
         val folderStr = getProjectFolder(projectKey)
         makeEmptyFolder(folderStr)
@@ -43,7 +43,7 @@ fun main(args: Array<String>) {
     }
     */
 
-    // arch cycle smells
+    // map sonar issues to arch cycle smells, takes ~2h30m
     for (projectKey in projectKeys) {
         val folderStr = getProjectFolder(projectKey)
         val archCycleSmellFile = findArchitectureSmellFile(projectKey,"classCyclesShapeTable.csv")
@@ -54,7 +54,9 @@ fun main(args: Array<String>) {
                 cyclicDependencyFile = archCycleSmellFile)
     }
 
-    // arch MAS smells
+
+
+    // map sonar issues to arch MAS smells, takes ~40m
     for (projectKey in projectKeys) {
         val folderStr = getProjectFolder(projectKey)
         val archMasFile = findArchitectureSmellFile(projectKey,"mas.csv")
@@ -64,21 +66,43 @@ fun main(args: Array<String>) {
                 masFile = archMasFile)
     }
 
-    /*
-    // calculate correlations
+
+    // calculate correlations, takes ~30m
     for (projectKey in projectKeys) {
         val folder = File(getProjectFolder(projectKey))
-        runRscript(File("correlations.R"), folder)
+        runRscript(File("correlation-cycle-size.R"), folder)
+        runRscript(File("correlation-cycle-classes.R"), folder)
+        runRscript(File("correlation-cycle-exists.R"), folder)
+        runRscript(File("correlation-mas-ud.R"), folder)
+        runRscript(File("correlation-mas-hl.R"), folder)
+        runRscript(File("correlation-mas-cd.R"), folder)
+        runRscript(File("correlation-mas-exists.R"), folder)
     }
-    */
 
-    //mergeExtractedSameCsvFiles("correlations-by-project.csv", projectKeys, "correlations.csv")
+    // merge correlation values from projects
+    mergeExtractedSameCsvFiles(projectKeys, "correlation-cycle-size.csv")
+    mergeExtractedSameCsvFiles(projectKeys, "correlation-cycle-classes.csv")
+    mergeExtractedSameCsvFiles(projectKeys, "correlation-cycle-exists.csv")
+    mergeExtractedSameCsvFiles(projectKeys, "correlation-mas-ud.csv")
+    mergeExtractedSameCsvFiles(projectKeys, "correlation-mas-hl.csv")
+    mergeExtractedSameCsvFiles(projectKeys, "correlation-mas-cd.csv")
+    mergeExtractedSameCsvFiles(projectKeys, "correlation-mas-exists.csv")
+
+    // merge architecture smells for projects...
     mergeExtractedCsvFiles(projectKeys, "cycles-issues-by-class.csv")
     mergeExtractedCsvFiles(projectKeys, "cycles-issues-by-cycle.csv")
     mergeExtractedCsvFiles(projectKeys, "mas-issues-by-package.csv")
-    // run correlations on all project issues
-    //runRscript(File("correlations.R"), File(workDir))
 
+    // ...and calculate correlations, takes very long time:
+    /*
+    runRscript(File("correlation-cycle-size.R"), File(workDir))
+    runRscript(File("correlation-cycle-classes.R"), File(workDir))
+    runRscript(File("correlation-cycle-exists.R"), File(workDir))
+    runRscript(File("correlation-mas-ud.R"), File(workDir))
+    runRscript(File("correlation-mas-hl.R"), File(workDir))
+    runRscript(File("correlation-mas-cd.R"), File(workDir))
+    runRscript(File("correlation-mas-exists.R"), File(workDir))
+    */
 
     /*
     //save history csv for "org.apache:commons-cli"
@@ -138,9 +162,9 @@ private fun mergeExtractedCsvFiles(projectKeys: List<String>, csvFilename: Strin
 /**
  * Merges extracted csv files for projects, provided the files have the same columns.
  */
-private fun mergeExtractedSameCsvFiles(outputFile: String, projectKeys: List<String>, csvFilename: String) {
+private fun mergeExtractedSameCsvFiles(projectKeys: List<String>, csvFilename: String) {
     println("Merging $csvFilename")
-    BufferedWriter(FileWriter(workDir + outputFile)).use { bw ->
+    BufferedWriter(FileWriter(workDir + "by-project-$csvFilename")).use { bw ->
         var commonHeader: String? = null
         for (projectKey in projectKeys) {
             val allFile = readListFromFile(getProjectFolder(projectKey) + csvFilename)
