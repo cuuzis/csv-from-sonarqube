@@ -88,7 +88,8 @@ fun main(args: Array<String>) {
     mergeExtractedSameCsvFiles(projectKeys, "correlation-mas-cd.csv")
     mergeExtractedSameCsvFiles(projectKeys, "correlation-mas-exists.csv")
     */
-    findUsefulCorrelations(outFile = "by-project-summary.csv", csvFile = "by-project-correlation-cycle-exists.csv")
+    // extracts a summary for the calculated correlations
+    summariseCorrelations("by-project-summary.csv")
     /*
     // merge architecture smells for projects (~30s)...
     mergeExtractedCsvFiles(projectKeys, "cycles-issues-by-class.csv")
@@ -145,8 +146,37 @@ fun main(args: Array<String>) {
     println("Execution completed in ${(System.currentTimeMillis()-startTime)/1000.0} seconds (${(System.currentTimeMillis() - startTime)/60000} minutes)")
 }
 
-fun findUsefulCorrelations(outFile: String, csvFile: String) {
-    println("Finding useful correlations")
+/**
+ * Merges together the correlation files, by extracting only useful correlations
+ */
+private fun summariseCorrelations(outFile: String) {
+    println("Finding significant correlations")
+    val correlationFiles = listOf(
+            "by-project-correlation-cycle-size.csv",
+            "by-project-correlation-cycle-classes.csv",
+            "by-project-correlation-cycle-exists.csv",
+            "by-project-correlation-mas-ud.csv",
+            "by-project-correlation-mas-hl.csv",
+            "by-project-correlation-mas-cd.csv",
+            "by-project-correlation-mas-exists.csv"
+    )
+    val rows = mutableListOf<Array<String>>()
+    for (correlationFile in correlationFiles) {
+        rows.addAll(findUsefulCorrelations(correlationFile))
+    }
+    FileWriter(workDir + outFile).use { fw ->
+        val csvWriter = CSVWriter(fw)
+        val header = arrayOf("measure", "issueName", "infectedProjects", "pvalue005", "correlation05", "correlation06", "projectsWithCorrelation")
+        csvWriter.writeNext(header)
+        csvWriter.writeAll(rows)
+    }
+    println("Significant correlations saved to ${workDir + outFile}")
+}
+
+/**
+ * Filters and counts issue correlations, finding rows with kendallPvalue < 0.05 and kendallCorrelationTau > 0.5
+ */
+fun findUsefulCorrelations(csvFile: String): List<Array<String>> {
     val correlationBeans = CsvToBeanBuilder<Correlations>(FileReader(workDir + csvFile))
             .withType(Correlations::class.java).build().parse()
             .map { it as Correlations }
@@ -168,15 +198,9 @@ fun findUsefulCorrelations(outFile: String, csvFile: String) {
                 correlation05Occurrences.joinToString(";") { it.project.orEmpty() }
                 ))
     }
-    FileWriter(workDir + outFile).use { fw ->
-        val csvWriter = CSVWriter(fw)
-        val header = arrayOf("measure", "issueName", "infectedProjects", "pvalue005", "correlation05", "correlation06", "projectsWithCorrelation")
-        csvWriter.writeNext(header)
-        csvWriter.writeAll(rows
-                .sortedWith(compareBy({ it[5] }, { it[4] }, { it[3] }, { it[2] } ))
-                .reversed())
-    }
-    println("Significant correlations saved to ${workDir + outFile}")
+    return rows // sorted by:       correlation06      correlation05      pvalue005          infectedProjects
+            .sortedWith(compareBy({ it[5].toInt() }, { it[4].toInt() }, { it[3].toInt() }, { it[2].toInt() } ))
+            .reversed()
 }
 
 /**
