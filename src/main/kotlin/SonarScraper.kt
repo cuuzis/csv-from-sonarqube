@@ -28,8 +28,8 @@ private val MAX_ELASTICSEARCH_RESULTS = 10000
 
 fun main(args: Array<String>) {
     val startTime = System.currentTimeMillis()
-    //val metricKeys = getMetricKeys()
-    //val ruleKeys = getRuleKeys()
+    val metricKeys = getMetricKeys()
+    val ruleKeys = getRuleKeys()
 
     //val projectKeys = getProjectsContainingString("QC -")//QC - aspectj, QC - jboss, QC - jtopen
 
@@ -77,8 +77,7 @@ fun main(args: Array<String>) {
         runRscript(File("correlation-mas-exists.R"), folder)
     }
     */
-
-/*
+    /*
     // merge correlation values from projects (~1s)
     mergeExtractedSameCsvFiles(projectKeys, "correlation-cycle-size.csv")
     mergeExtractedSameCsvFiles(projectKeys, "correlation-cycle-classes.csv")
@@ -104,8 +103,8 @@ fun main(args: Array<String>) {
     runRscript(File("correlation-mas-cd.R"), File(workDir))
     runRscript(File("correlation-mas-exists.R"), File(workDir))
     */
-    //v2, mas file is shrunk:
-    val rFileList = listOf(
+    //running in parallel, mas file is shrunk:
+    /*val rFileList = listOf(
             "correlation-cycle-size.R",
             "correlation-cycle-classes.R",
             "correlation-cycle-exists.R",
@@ -114,21 +113,38 @@ fun main(args: Array<String>) {
             "correlation-mas-cd.R",
             "correlation-mas-exists.R")
     rFileList.parallelStream().forEach { rFile -> runRscript(File(rFile), File(workDir)) }
+    */
+//    R script 'correlation-mas-ud.R' on extraction done in 3569.168 seconds
+//    R script 'correlation-mas-hl.R' on extraction done in 3725.133 seconds
+//    R script 'correlation-mas-cd.R' on extraction done in 4281.505 seconds
+//    R script 'correlation-mas-exists.R' on extraction done in 4369.807 seconds (72 minutes)
+//    R script 'correlation-cycle-size.R' on extraction done in 20509.04 seconds
+//    R script 'correlation-cycle-classes.R' on extraction done in 20626.744 seconds
+//    R script 'correlation-cycle-exists.R' on extraction done in 20758.265 seconds
+//    Execution completed in 20758.312 seconds (345 minutes = 6h)
 
-    /*
+
+
+
+
+
+
     //save history csv for "org.apache:commons-cli"
     val projectKey = "org.apache:commons-cli"
-    saveNonemptyPastMeasures("nonempty-past-measures.txt", projectKey, metricKeys)
-    val usefulMetricKeys = readListFromFile("nonempty-past-measures.txt")
-    saveMeasureHistory("measures.csv", projectKey, usefulMetricKeys)
-    saveIssues("issues.csv", projectKey, "CLOSED,OPEN", ruleKeys)
-    mergeMeasuresWithIssues("measures.csv", "issues.csv", "measures-and-issues.csv")
+    val folderStr = getProjectFolder(projectKey)
+    makeEmptyFolder(folderStr)
+    saveNonemptyPastMeasures(folderStr + "nonempty-past-measures.txt", projectKey, metricKeys)
+    val usefulMetricKeys = readListFromFile(folderStr + "nonempty-past-measures.txt")
+    saveMeasureHistory(fileName = folderStr + "measures.csv", projectKey = projectKey, metricKeys = usefulMetricKeys)
+    saveIssues(fileName = folderStr + "issues.csv", projectKey = projectKey, statuses = "CLOSED,OPEN", ruleKeys = ruleKeys)
+    mergeMeasuresWithIssues(measuresFile = folderStr + "measures.csv", issuesFile = folderStr + "issues.csv", combinedFile = folderStr + "measures-and-issues.csv")
 
 
-    saveJiraIssues("jira-issues.csv", "CLI")
-    saveGitCommits("git-commits.csv", "https://github.com/apache/commons-cli.git")
-    */
+    saveJiraIssues(folderStr + "jira-issues.csv", "CLI")
+    saveGitCommits(folderStr + "git-commits.csv", "https://github.com/apache/commons-cli.git")
+
     //mergeFaultsAndSmells("git-commits.csv","jira-issues.csv", "issues.csv", "faults-and-smells.csv")
+
 
     println("Execution completed in ${(System.currentTimeMillis()-startTime)/1000.0} seconds (${(System.currentTimeMillis() - startTime)/60000} minutes)")
 }
@@ -183,7 +199,7 @@ private fun mergeExtractedSameCsvFiles(projectKeys: List<String>, csvFilename: S
             val rows = allFile.subList(1,allFile.size)
             if (commonHeader == null) {
                 commonHeader = header
-                bw.write(commonHeader)
+                bw.write("\"project\"," + commonHeader)
                 bw.newLine()
             }
             if (header != commonHeader) {
@@ -192,7 +208,7 @@ private fun mergeExtractedSameCsvFiles(projectKeys: List<String>, csvFilename: S
                         "\n$projectKey: $header")
             }
             rows.forEach { row ->
-                bw.write(row)
+                bw.write("\"$projectKey\"," + row)
                 bw.newLine()
             }
         }
@@ -231,7 +247,7 @@ fun  runRscript(rFile: File, folder: File) {
     if (returnCode != 0)
         throw Exception("Rscript.exe execution returned $returnCode")
     println("R script '${rFile.name}' on ${folder.name.split(File.separatorChar).last()}" +
-            " done in ${(System.currentTimeMillis() - startTime)/1000.0} seconds)")
+            " done in ${(System.currentTimeMillis() - startTime)/1000.0} seconds")
 }
 
 fun  findArchitectureSmellFile(projectKey: String, fileName: String): File {
