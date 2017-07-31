@@ -17,6 +17,7 @@ import java.io.FileReader
 import java.io.FileWriter
 import java.io.File
 import com.opencsv.CSVReader
+import csv_model.merged.Correlations
 
 
 val parser = JSONParser()
@@ -28,8 +29,8 @@ private val MAX_ELASTICSEARCH_RESULTS = 10000
 
 fun main(args: Array<String>) {
     val startTime = System.currentTimeMillis()
-    val metricKeys = getMetricKeys()
-    val ruleKeys = getRuleKeys()
+    //val metricKeys = getMetricKeys()
+    //val ruleKeys = getRuleKeys()
 
     //val projectKeys = getProjectsContainingString("QC -")//QC - aspectj, QC - jboss, QC - jtopen
 
@@ -87,6 +88,7 @@ fun main(args: Array<String>) {
     mergeExtractedSameCsvFiles(projectKeys, "correlation-mas-cd.csv")
     mergeExtractedSameCsvFiles(projectKeys, "correlation-mas-exists.csv")
     */
+    findUsefulCorrelations(outFile = "by-project-summary.csv", csvFile = "by-project-correlation-cycle-exists.csv")
     /*
     // merge architecture smells for projects (~30s)...
     mergeExtractedCsvFiles(projectKeys, "cycles-issues-by-class.csv")
@@ -123,12 +125,7 @@ fun main(args: Array<String>) {
 //    R script 'correlation-cycle-exists.R' on extraction done in 20758.265 seconds
 //    Execution completed in 20758.312 seconds (345 minutes = 6h)
 
-
-
-
-
-
-
+    /*
     //save history csv for "org.apache:commons-cli"
     val projectKey = "org.apache:commons-cli"
     val folderStr = getProjectFolder(projectKey)
@@ -139,14 +136,47 @@ fun main(args: Array<String>) {
     saveIssues(fileName = folderStr + "issues.csv", projectKey = projectKey, statuses = "CLOSED,OPEN", ruleKeys = ruleKeys)
     mergeMeasuresWithIssues(measuresFile = folderStr + "measures.csv", issuesFile = folderStr + "issues.csv", combinedFile = folderStr + "measures-and-issues.csv")
 
-
     saveJiraIssues(folderStr + "jira-issues.csv", "CLI")
     saveGitCommits(folderStr + "git-commits.csv", "https://github.com/apache/commons-cli.git")
 
     //mergeFaultsAndSmells("git-commits.csv","jira-issues.csv", "issues.csv", "faults-and-smells.csv")
-
+*/
 
     println("Execution completed in ${(System.currentTimeMillis()-startTime)/1000.0} seconds (${(System.currentTimeMillis() - startTime)/60000} minutes)")
+}
+
+fun findUsefulCorrelations(outFile: String, csvFile: String) {
+    println("Finding useful correlations")
+    val correlationBeans = CsvToBeanBuilder<Correlations>(FileReader(workDir + csvFile))
+            .withType(Correlations::class.java).build().parse()
+            .map { it as Correlations }
+    val issueKeys = mutableSetOf<String>()
+    correlationBeans.mapTo(issueKeys) { it.issueName.orEmpty() }
+    val rows = mutableListOf<Array<String>>()
+    for (issue in issueKeys) {
+        val infectedProjects = correlationBeans.filter { it.issueName == issue }
+        val measurableOccurrences = infectedProjects.filter { it.kendallPvalue?.toDoubleOrNull() != null && it.kendallPvalue.toDouble() < 0.05 }
+        val correlation05Occurrences = measurableOccurrences.filter { it.kendallTau?.toDoubleOrNull() != null && it.kendallTau.toDouble() > 0.5 }
+        val correlation06Occurrences = measurableOccurrences.count { it.kendallTau?.toDoubleOrNull() != null && it.kendallTau.toDouble() > 0.6 }
+        rows.add(arrayOf(
+                csvFile.removePrefix("by-project-correlation-").removeSuffix(".csv"),
+                issue,
+                infectedProjects.count().toString(),
+                measurableOccurrences.count().toString(),
+                correlation05Occurrences.count().toString(),
+                correlation06Occurrences.toString(),
+                correlation05Occurrences.joinToString(";") { it.project.orEmpty() }
+                ))
+    }
+    FileWriter(workDir + outFile).use { fw ->
+        val csvWriter = CSVWriter(fw)
+        val header = arrayOf("measure", "issueName", "infectedProjects", "pvalue005", "correlation05", "correlation06", "projectsWithCorrelation")
+        csvWriter.writeNext(header)
+        csvWriter.writeAll(rows
+                .sortedWith(compareBy({ it[5] }, { it[4] }, { it[3] }, { it[2] } ))
+                .reversed())
+    }
+    println("Significant correlations saved to ${workDir + outFile}")
 }
 
 /**
