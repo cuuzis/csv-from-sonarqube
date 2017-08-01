@@ -16,306 +16,11 @@ import java.util.*
 import java.io.FileReader
 import java.io.FileWriter
 import java.io.File
-import com.opencsv.CSVReader
-import csv_model.merged.Correlations
 
 
-val parser = JSONParser()
-val sonarInstance = "http://sonar.inf.unibz.it"
-val workDir = "extraction" + File.separatorChar
-
+private val parser = JSONParser()
 private val MAX_URL_LENGTH = 2000
 private val MAX_ELASTICSEARCH_RESULTS = 10000
-
-fun main(args: Array<String>) {
-    val startTime = System.currentTimeMillis()
-    //val metricKeys = getMetricKeys()
-    //val ruleKeys = getRuleKeys()
-
-    //val projectKeys = getProjectsContainingString("QC -")//QC - aspectj, QC - jboss, QC - jtopen
-
-    /*
-    // extract issues, takes long
-    for (projectKey in projectKeys) {
-        val folderStr = getProjectFolder(projectKey)
-        makeEmptyFolder(folderStr)
-        saveIssues(folderStr + "current-issues.csv", projectKey, "OPEN", ruleKeys)
-    }
-    */
-    /*
-    // map sonar issues to arch cycle smells, takes ~2h30m
-    for (projectKey in projectKeys) {
-        val folderStr = getProjectFolder(projectKey)
-        val archCycleSmellFile = findArchitectureSmellFile(projectKey,"classCyclesShapeTable.csv")
-        mergeArchitectureAndCodeIssues(
-                outputByClass = folderStr + "cycles-issues-by-class.csv",
-                outputByCycle = folderStr + "cycles-issues-by-cycle.csv",
-                issueFile = folderStr + "current-issues.csv",
-                cyclicDependencyFile = archCycleSmellFile)
-    }
-    */
-    /*
-    // map sonar issues to arch MAS smells, takes ~40m
-    for (projectKey in projectKeys) {
-        val folderStr = getProjectFolder(projectKey)
-        val archMasFile = findArchitectureSmellFile(projectKey,"mas.csv")
-        mergeArchMasAndCodeIssues(
-                outputFile = folderStr + "mas-issues-by-package.csv",
-                issueFile = folderStr + "current-issues.csv",
-                masFile = archMasFile)
-    }
-    */
-    /*
-    // calculate correlations, takes ~30m
-    projectKeys.parallelStream().forEach { projectKey ->
-        val folder = File(getProjectFolder(projectKey))
-        runRscript(File("correlation-cycle-size.R"), folder)
-        runRscript(File("correlation-cycle-classes.R"), folder)
-        runRscript(File("correlation-cycle-exists.R"), folder)
-        runRscript(File("correlation-mas-ud.R"), folder)
-        runRscript(File("correlation-mas-hl.R"), folder)
-        runRscript(File("correlation-mas-cd.R"), folder)
-        runRscript(File("correlation-mas-exists.R"), folder)
-    }
-    */
-    /*
-    // merge correlation values from projects (~1s)
-    mergeExtractedSameCsvFiles(projectKeys, "correlation-cycle-size.csv")
-    mergeExtractedSameCsvFiles(projectKeys, "correlation-cycle-classes.csv")
-    mergeExtractedSameCsvFiles(projectKeys, "correlation-cycle-exists.csv")
-    mergeExtractedSameCsvFiles(projectKeys, "correlation-mas-ud.csv")
-    mergeExtractedSameCsvFiles(projectKeys, "correlation-mas-hl.csv")
-    mergeExtractedSameCsvFiles(projectKeys, "correlation-mas-cd.csv")
-    mergeExtractedSameCsvFiles(projectKeys, "correlation-mas-exists.csv")
-    */
-    // extracts a summary for the calculated correlations
-    summariseCorrelations("by-project-summary.csv")
-    /*
-    // merge architecture smells for projects (~30s)...
-    mergeExtractedCsvFiles(projectKeys, "cycles-issues-by-class.csv")
-    mergeExtractedCsvFiles(projectKeys, "cycles-issues-by-cycle.csv")
-    mergeExtractedCsvFiles(projectKeys, "mas-issues-by-package.csv")
-    */
-    /*
-    // ...and calculate correlations, takes very long time (188 columns, for each: ~2min cycle, ~7min mas):
-    runRscript(File("correlation-cycle-size.R"), File(workDir))
-    runRscript(File("correlation-cycle-classes.R"), File(workDir))
-    runRscript(File("correlation-cycle-exists.R"), File(workDir))
-    runRscript(File("correlation-mas-ud.R"), File(workDir))
-    runRscript(File("correlation-mas-hl.R"), File(workDir))
-    runRscript(File("correlation-mas-cd.R"), File(workDir))
-    runRscript(File("correlation-mas-exists.R"), File(workDir))
-    */
-    //running in parallel, mas file is shrunk:
-    /*val rFileList = listOf(
-            "correlation-cycle-size.R",
-            "correlation-cycle-classes.R",
-            "correlation-cycle-exists.R",
-            "correlation-mas-ud.R",
-            "correlation-mas-hl.R",
-            "correlation-mas-cd.R",
-            "correlation-mas-exists.R")
-    rFileList.parallelStream().forEach { rFile -> runRscript(File(rFile), File(workDir)) }
-    */
-//    R script 'correlation-mas-ud.R' on extraction done in 3569.168 seconds
-//    R script 'correlation-mas-hl.R' on extraction done in 3725.133 seconds
-//    R script 'correlation-mas-cd.R' on extraction done in 4281.505 seconds
-//    R script 'correlation-mas-exists.R' on extraction done in 4369.807 seconds (72 minutes)
-//    R script 'correlation-cycle-size.R' on extraction done in 20509.04 seconds
-//    R script 'correlation-cycle-classes.R' on extraction done in 20626.744 seconds
-//    R script 'correlation-cycle-exists.R' on extraction done in 20758.265 seconds
-//    Execution completed in 20758.312 seconds (345 minutes = 6h)
-
-    /*
-    //save history csv for "org.apache:commons-cli"
-    val projectKey = "org.apache:commons-cli"
-    val folderStr = getProjectFolder(projectKey)
-    makeEmptyFolder(folderStr)
-    saveNonemptyPastMeasures(folderStr + "nonempty-past-measures.txt", projectKey, metricKeys)
-    val usefulMetricKeys = readListFromFile(folderStr + "nonempty-past-measures.txt")
-    saveMeasureHistory(fileName = folderStr + "measures.csv", projectKey = projectKey, metricKeys = usefulMetricKeys)
-    saveIssues(fileName = folderStr + "issues.csv", projectKey = projectKey, statuses = "CLOSED,OPEN", ruleKeys = ruleKeys)
-    mergeMeasuresWithIssues(measuresFile = folderStr + "measures.csv", issuesFile = folderStr + "issues.csv", combinedFile = folderStr + "measures-and-issues.csv")
-
-    saveJiraIssues(folderStr + "jira-issues.csv", "CLI")
-    saveGitCommits(folderStr + "git-commits.csv", "https://github.com/apache/commons-cli.git")
-
-    //mergeFaultsAndSmells("git-commits.csv","jira-issues.csv", "issues.csv", "faults-and-smells.csv")
-*/
-
-    println("Execution completed in ${(System.currentTimeMillis()-startTime)/1000.0} seconds (${(System.currentTimeMillis() - startTime)/60000} minutes)")
-}
-
-/**
- * Merges together the correlation files, by extracting only useful correlations
- */
-private fun summariseCorrelations(outFile: String) {
-    println("Finding significant correlations")
-    val correlationFiles = listOf(
-            "by-project-correlation-cycle-size.csv",
-            "by-project-correlation-cycle-classes.csv",
-            "by-project-correlation-cycle-exists.csv",
-            "by-project-correlation-mas-ud.csv",
-            "by-project-correlation-mas-hl.csv",
-            "by-project-correlation-mas-cd.csv",
-            "by-project-correlation-mas-exists.csv"
-    )
-    val rows = mutableListOf<Array<String>>()
-    for (correlationFile in correlationFiles) {
-        rows.addAll(findUsefulCorrelations(correlationFile))
-    }
-    FileWriter(workDir + outFile).use { fw ->
-        val csvWriter = CSVWriter(fw)
-        val header = arrayOf("measure", "issueName", "infectedProjects", "pvalue005", "correlation05", "correlation06", "projectsWithCorrelation")
-        csvWriter.writeNext(header)
-        csvWriter.writeAll(rows)
-    }
-    println("Significant correlations saved to ${workDir + outFile}")
-}
-
-/**
- * Filters and counts issue correlations, finding rows with kendallPvalue < 0.05 and kendallCorrelationTau > 0.5
- */
-fun findUsefulCorrelations(csvFile: String): List<Array<String>> {
-    val correlationBeans = CsvToBeanBuilder<Correlations>(FileReader(workDir + csvFile))
-            .withType(Correlations::class.java).build().parse()
-            .map { it as Correlations }
-    val issueKeys = mutableSetOf<String>()
-    correlationBeans.mapTo(issueKeys) { it.issueName.orEmpty() }
-    val rows = mutableListOf<Array<String>>()
-    for (issue in issueKeys) {
-        val infectedProjects = correlationBeans.filter { it.issueName == issue }
-        val measurableOccurrences = infectedProjects.filter { it.kendallPvalue?.toDoubleOrNull() != null && it.kendallPvalue.toDouble() < 0.05 }
-        val correlation05Occurrences = measurableOccurrences.filter { it.kendallTau?.toDoubleOrNull() != null && it.kendallTau.toDouble() > 0.5 }
-        val correlation06Occurrences = measurableOccurrences.count { it.kendallTau?.toDoubleOrNull() != null && it.kendallTau.toDouble() > 0.6 }
-        rows.add(arrayOf(
-                csvFile.removePrefix("by-project-correlation-").removeSuffix(".csv"),
-                issue,
-                infectedProjects.count().toString(),
-                measurableOccurrences.count().toString(),
-                correlation05Occurrences.count().toString(),
-                correlation06Occurrences.toString(),
-                correlation05Occurrences.joinToString(";") { it.project.orEmpty() }
-                ))
-    }
-    return rows // sorted by:       correlation06      correlation05      pvalue005          infectedProjects
-            .sortedWith(compareBy({ it[5].toInt() }, { it[4].toInt() }, { it[3].toInt() }, { it[2].toInt() } ))
-            .reversed()
-}
-
-/**
- * Merges together extracted csv files for projects.
- */
-private fun mergeExtractedCsvFiles(projectKeys: List<String>, csvFilename: String) {
-    println("Merging $csvFilename")
-    // extract all column names occurring in files
-    val columnNames = mutableSetOf<String>()
-    for (projectKey in projectKeys) {
-        val reader = CSVReader(FileReader(getProjectFolder(projectKey) + csvFilename))
-        val header = reader.readNext()
-        columnNames.addAll(header)
-    }
-    val result = mutableListOf<Array<String>>()
-    result.add(columnNames.toTypedArray())
-    for (projectKey in projectKeys) {
-        // map column indexes
-        val reader = CSVReader(FileReader(getProjectFolder(projectKey) + csvFilename))
-        val header = reader.readNext()
-        val mappedPositions = mutableMapOf<Int,Int>()
-        for ((index, column) in header.withIndex())
-            mappedPositions.put(index, columnNames.indexOf(column))
-        // save mapped values, put "0" if column does not exist
-        val csvRows: List<Array<String>> = reader.readAll()
-        for (csvRow in csvRows) {
-            val row = Array<String>(columnNames.size, { _ -> "0"})
-            for ((index, value) in csvRow.withIndex())
-                row[mappedPositions[index]!!] = value
-            result.add(row)
-        }
-    }
-    // save data to file
-    FileWriter(workDir + csvFilename).use { fw ->
-        val csvWriter = CSVWriter(fw)
-        csvWriter.writeAll(result)
-    }
-}
-
-/**
- * Merges extracted csv files for projects, provided the files have the same columns.
- */
-private fun mergeExtractedSameCsvFiles(projectKeys: List<String>, csvFilename: String) {
-    println("Merging $csvFilename")
-    BufferedWriter(FileWriter(workDir + "by-project-$csvFilename")).use { bw ->
-        var commonHeader: String? = null
-        for (projectKey in projectKeys) {
-            val allFile = readListFromFile(getProjectFolder(projectKey) + csvFilename)
-            val header = allFile[0]
-            val rows = allFile.subList(1,allFile.size)
-            if (commonHeader == null) {
-                commonHeader = header
-                bw.write("\"project\"," + commonHeader)
-                bw.newLine()
-            }
-            if (header != commonHeader) {
-                throw Exception("Files to merge have different columns" +
-                        "\nexpected: $commonHeader" +
-                        "\n$projectKey: $header")
-            }
-            rows.forEach { row ->
-                bw.write("\"$projectKey\"," + row)
-                bw.newLine()
-            }
-        }
-    }
-}
-
-
-/**
- * Creates an empty folder at the specified directory.
- * If the specified folder already exists its contents are deleted.
- */
-private fun makeEmptyFolder(directoryStr: String) {
-    val folder = File(directoryStr)
-    if (folder.exists()) {
-        if (!folder.deleteRecursively())
-            throw Exception("Could not delete ${folder.name} directory")
-    }
-    if (!folder.mkdirs())
-        throw Exception("Could not create ${folder.name} directory")
-}
-
-/**
- * Runs 'Rscript.exe rFile' in the specified folder
- */
-fun  runRscript(rFile: File, folder: File) {
-    println("Running '${rFile.name}' on " + folder.name.split(File.separatorChar).last())
-    val startTime = System.currentTimeMillis()
-    val scriptFile = rFile.copyTo(File(folder, rFile.name), overwrite = true)
-    val pb = ProcessBuilder("C:\\Program Files\\R\\R-3.3.3\\bin\\x64\\Rscript.exe", scriptFile.name)
-            .directory(folder)
-            .redirectErrorStream(true)
-            .inheritIO()
-    val process = pb.start()
-    val returnCode = process.waitFor()
-    scriptFile.delete()
-    if (returnCode != 0)
-        throw Exception("Rscript.exe execution returned $returnCode")
-    println("R script '${rFile.name}' on ${folder.name.split(File.separatorChar).last()}" +
-            " done in ${(System.currentTimeMillis() - startTime)/1000.0} seconds")
-}
-
-fun  findArchitectureSmellFile(projectKey: String, fileName: String): File {
-    val architectureRoot = File("architecture-smells-arcan/")
-    val architectureFolder = architectureRoot.listFiles().find {
-        it.toString().toLowerCase().startsWith(
-                architectureRoot.name + File.separatorChar + projectKey.removePrefix("QC:").toLowerCase())
-    }!!
-    return architectureFolder.listFiles().find { it.name == fileName}!!
-}
-
-fun getProjectFolder(projectKey: String): String {
-    return workDir + projectKey.replace("\\W".toRegex(),"-") + File.separatorChar
-}
 
 /*
 * Parses Instant to sonarqube-format datetime
@@ -337,8 +42,8 @@ fun  getInstantFromSonarDate(sonarDate: String): Instant {
     return OffsetDateTime.parse(dateStr).toInstant()
 }
 
-/*
-Returns a list of project keys containing a string
+/**
+ * Returns a list of project keys containing a string
  */
 fun  getProjectsContainingString(partOfName: String): List<String> {
     println("Requesting keys for projects containing '$partOfName'")
@@ -438,7 +143,7 @@ private fun saveCurrentMeasuresAndIssues(projectKeys: List<String>, metricKeys: 
 Tests which past measures contain nonempty values for a given project.
 Stores the result in file.
  */
-private fun saveNonemptyPastMeasures(fileName: String, projectKey: String, metricKeys: List<String>) {
+fun saveNonemptyPastMeasures(fileName: String, projectKey: String, metricKeys: List<String>) {
     val usefulMeasures = mutableListOf<String>()
     val measureQuery = "$sonarInstance/api/measures/search_history" +
             "?component=$projectKey" +
@@ -493,7 +198,7 @@ private fun saveNonemptyPastMeasures(fileName: String, projectKey: String, metri
 /**
  * Returns all metrics available on the server
  */
-private fun getMetricKeys(): List<String> {
+fun getMetricKeys(): List<String> {
     println("Requesting metric keys")
     val metricsQuery = "$sonarInstance/api/metrics/search?ps=1000"
     val metricsResult = getStringFromUrl(metricsQuery)
@@ -511,7 +216,7 @@ private fun getMetricKeys(): List<String> {
 /*
 Saves past measures measures for a project in a .csv file
  */
-private fun saveMeasureHistory(fileName: String, projectKey: String, metricKeys: List<String>) {
+fun saveMeasureHistory(fileName: String, projectKey: String, metricKeys: List<String>) {
     val measureQuery = "$sonarInstance/api/measures/search_history" +
             "?component=" + projectKey +
             "&ps=1000" +
@@ -541,19 +246,22 @@ private fun saveMeasureHistory(fileName: String, projectKey: String, metricKeys:
     for ((key, values) in measureMap) {
         rows.add((listOf(key) + values))
     }
-    FileWriter(fileName).use { fw ->
+    val folderStr = getProjectFolder(projectKey)
+    FileWriter(folderStr + fileName).use { fw ->
         val csvWriter = CSVWriter(fw)
         csvWriter.writeAll(rows.map { it.toTypedArray() })
-        println("Sonarqube measures saved to $fileName")
+        println("Sonarqube measures saved to ${folderStr + fileName}")
     }
 }
 
 /*
 Saves issue history for a project in a .csv file
  */
-private fun saveIssues(fileName: String, projectKey: String, statuses: String, ruleKeys: List<String>) {
+fun saveIssues(fileName: String, projectKey: String, statuses: String, ruleKeys: List<String>) {
     print("Extracting issues for " + projectKey)
     val startTime = System.currentTimeMillis()
+    val folderStr = getProjectFolder(projectKey)
+    makeEmptyFolder(folderStr)
     val header = listOf("creation-date", "update-date", "rule", "component")
     val rows = mutableListOf<List<String>>()
     rows.add(header)
@@ -562,10 +270,10 @@ private fun saveIssues(fileName: String, projectKey: String, statuses: String, r
         saveIssueRows(projectKey, statuses, splitKeys, rows)
     }
 
-    FileWriter(fileName).use { fw ->
+    FileWriter(folderStr + fileName).use { fw ->
         val csvWriter = CSVWriter(fw)
         csvWriter.writeAll(rows.map { it.toTypedArray() })
-        println("Sonarqube issues saved to $fileName, extraction took ${(System.currentTimeMillis()-startTime)/1000.0} seconds")
+        println("Sonarqube issues saved to ${folderStr + fileName}, extraction took ${(System.currentTimeMillis()-startTime)/1000.0} seconds")
     }
 }
 
@@ -639,7 +347,7 @@ private fun saveIssueRows(componentKey: String, statuses: String, ruleKeys: List
  * Splits a list into many smaller lists.
  * @param batchSize maximum size for the smaller lists
  */
-fun splitIntoBatches(list: List<String>, batchSize: Int): List<List<String>> {
+private fun splitIntoBatches(list: List<String>, batchSize: Int): List<List<String>> {
     val result = mutableListOf<List<String>>()
     var start = 0
     var end = batchSize
@@ -656,7 +364,7 @@ fun splitIntoBatches(list: List<String>, batchSize: Int): List<List<String>> {
 /**
  * Get a list of rule keys for java language
  */
-private fun getRuleKeys(): List<String> {
+fun getRuleKeys(): List<String> {
     println("Requesting rule keys for java")
     val result = mutableListOf<String>()
     val pageSize = 500
@@ -700,24 +408,4 @@ fun getStringFromUrl(queryURL: String): String {
         }
     } while (inputLine != null)
     return stringBuilder.toString()
-}
-
-/*
-Reads each line from file into a string list
- */
-fun readListFromFile(filename: String): List<String> {
-    val result = mutableListOf<String>()
-    val file = File(filename)
-    try {
-        BufferedReader(FileReader(file)).use { br ->
-            do {
-                val line = br.readLine()
-                if (line != null)
-                    result.add(line)
-            } while (line != null)
-        }
-    } catch (e: IOException) {
-        e.printStackTrace()
-    }
-    return result
 }

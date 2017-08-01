@@ -1,10 +1,11 @@
 import com.opencsv.CSVWriter
 import org.json.simple.JSONArray
 import org.json.simple.JSONObject
-import java.io.BufferedWriter
+import org.json.simple.parser.JSONParser
 import java.io.FileWriter
 import java.net.URLEncoder
 
+private val parser = JSONParser()
 /*
 Saves all issues for a given project
  */

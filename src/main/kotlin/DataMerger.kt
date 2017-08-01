@@ -1,9 +1,6 @@
 import com.opencsv.CSVReader
 import com.opencsv.CSVWriter
 import com.opencsv.bean.CsvToBeanBuilder
-import java.io.File
-import java.io.FileReader
-import java.io.FileWriter
 import com.opencsv.bean.StatefulBeanToCsvBuilder
 import csv_model.architecture_smells.ArchClassCycles
 import csv_model.architecture_smells.ArchMultiA
@@ -11,6 +8,7 @@ import csv_model.extracted.GitCommits
 import csv_model.extracted.JiraFaults
 import csv_model.merged.MergedIssues
 import csv_model.extracted.SonarIssues
+import java.io.*
 
 
 /*
@@ -164,7 +162,19 @@ fun mergeFaultsAndSmells(commitFile: String, faultFile: String, issuesFile: Stri
  *     B         -          1
  *     C         1          -
  */
-fun mergeArchitectureAndCodeIssues(outputByClass: String, outputByCycle: String, issueFile: String, cyclicDependencyFile: File) {
+fun mapIssuesToCyclicDependencies(projectKeys: List<String>) {
+    for (projectKey in projectKeys) {
+        val folderStr = getProjectFolder(projectKey)
+        val archCycleSmellFile = findArchitectureSmellFile(projectKey, "classCyclesShapeTable.csv")
+        mergeIssuesWithCyclicDependencies(
+                outputByClass = folderStr + "cycles-issues-by-class.csv",
+                outputByCycle = folderStr + "cycles-issues-by-cycle.csv",
+                issueFile = folderStr + "current-issues.csv",
+                cyclicDependencyFile = archCycleSmellFile)
+    }
+}
+
+private fun mergeIssuesWithCyclicDependencies(outputByClass: String, outputByCycle: String, issueFile: String, cyclicDependencyFile: File) {
     println("Merging cyclic dependencies and sonar issues")
     val startTime = System.currentTimeMillis()
     // read code smells
@@ -303,7 +313,18 @@ fun mergeArchitectureAndCodeIssues(outputByClass: String, outputByCycle: String,
 /**
  * Merges architecture MAS and code issues by packages
  */
-fun mergeArchMasAndCodeIssues(outputFile: String, issueFile: String, masFile: File) {
+fun mapIssuesToMAS(projectKeys: List<String>) {
+    for (projectKey in projectKeys) {
+        val folderStr = getProjectFolder(projectKey)
+        val archMasFile = findArchitectureSmellFile(projectKey, "mas.csv")
+        mergeIssuesWithMAS(
+                outputFile = folderStr + "mas-issues-by-package.csv",
+                issueFile = folderStr + "current-issues.csv",
+                masFile = archMasFile)
+    }
+}
+
+private fun mergeIssuesWithMAS(outputFile: String, issueFile: String, masFile: File) {
     println("Merging MAS and sonar issues")
     val startTime = System.currentTimeMillis()
     // read code smells
@@ -365,4 +386,123 @@ fun mergeArchMasAndCodeIssues(outputFile: String, issueFile: String, masFile: Fi
 
     println("MAS and sonar issues saved to $outputFile")
     println("Merging took ${(System.currentTimeMillis()-startTime)/1000.0} seconds")
+}
+
+/**
+ * Merges together extracted csv files for projects.
+ */
+fun mergeExtractedCsvFiles(projectKeys: List<String>, csvFilename: String) {
+    println("Merging $csvFilename")
+    // extract all column names occurring in files
+    val columnNames = mutableSetOf<String>()
+    for (projectKey in projectKeys) {
+        val reader = CSVReader(FileReader(getProjectFolder(projectKey) + csvFilename))
+        val header = reader.readNext()
+        columnNames.addAll(header)
+    }
+    val result = mutableListOf<Array<String>>()
+    result.add(columnNames.toTypedArray())
+    for (projectKey in projectKeys) {
+        // map column indexes
+        val reader = CSVReader(FileReader(getProjectFolder(projectKey) + csvFilename))
+        val header = reader.readNext()
+        val mappedPositions = mutableMapOf<Int,Int>()
+        for ((index, column) in header.withIndex())
+            mappedPositions.put(index, columnNames.indexOf(column))
+        // save mapped values, put "0" if column does not exist
+        val csvRows: List<Array<String>> = reader.readAll()
+        for (csvRow in csvRows) {
+            val row = Array<String>(columnNames.size, { _ -> "0"})
+            for ((index, value) in csvRow.withIndex())
+                row[mappedPositions[index]!!] = value
+            result.add(row)
+        }
+    }
+    // save data to file
+    FileWriter(workDir + csvFilename).use { fw ->
+        val csvWriter = CSVWriter(fw)
+        csvWriter.writeAll(result)
+    }
+}
+
+/**
+ * Merges extracted csv files for projects, provided the files have the same columns.
+ */
+fun mergeExtractedSameCsvFiles(projectKeys: List<String>, csvFilename: String) {
+    println("Merging $csvFilename")
+    BufferedWriter(FileWriter(workDir + "by-project-$csvFilename")).use { bw ->
+        var commonHeader: String? = null
+        for (projectKey in projectKeys) {
+            val allFile = readListFromFile(getProjectFolder(projectKey) + csvFilename)
+            val header = allFile[0]
+            val rows = allFile.subList(1,allFile.size)
+            if (commonHeader == null) {
+                commonHeader = header
+                bw.write("\"project\"," + commonHeader)
+                bw.newLine()
+            }
+            if (header != commonHeader) {
+                throw Exception("Files to merge have different columns" +
+                        "\nexpected: $commonHeader" +
+                        "\n$projectKey: $header")
+            }
+            rows.forEach { row ->
+                bw.write("\"$projectKey\"," + row)
+                bw.newLine()
+            }
+        }
+    }
+}
+
+/**
+ * Creates an empty folder at the specified directory.
+ * If the specified folder already exists its contents are deleted.
+ */
+fun makeEmptyFolder(directoryStr: String) {
+    val folder = File(directoryStr)
+    if (folder.exists()) {
+        if (!folder.deleteRecursively())
+            throw Exception("Could not delete ${folder.name} directory")
+    }
+    if (!folder.mkdirs())
+        throw Exception("Could not create ${folder.name} directory")
+}
+
+/**
+ * Returns the requested architecture smell file for a project
+ */
+private fun findArchitectureSmellFile(projectKey: String, fileName: String): File {
+    val architectureRoot = File("architecture-smells-arcan/")
+    val architectureFolder = architectureRoot.listFiles().find {
+        it.toString().toLowerCase().startsWith(
+                architectureRoot.name + File.separatorChar + projectKey.removePrefix("QC:").toLowerCase())
+    }!!
+    return architectureFolder.listFiles().find { it.name == fileName}!!
+}
+
+/**
+ * Returns valid folder name for projectKey
+ */
+fun getProjectFolder(projectKey: String): String {
+    return workDir + projectKey.replace("\\W".toRegex(),"-") + File.separatorChar
+}
+
+/**
+ * Reads each line from file into a string list
+ */
+fun readListFromFile(filename: String): List<String> {
+    val result = mutableListOf<String>()
+    val file = File(filename)
+    try {
+        BufferedReader(FileReader(file)).use { br ->
+            do {
+                val line = br.readLine()
+                if (line != null)
+                    result.add(line)
+            } while (line != null)
+        }
+    } catch (e: IOException) {
+        e.printStackTrace()
+    }
+    return result
 }
