@@ -13,7 +13,8 @@ fun saveGitCommits(fileName: String, repositoryURL: String) {
     rows.add(header)
 
     // clone repository into temp folder and access data
-    val localPath = File("tmpGitRepo")
+    val checkoutFolder = fileName.removeSuffix(fileName.split(File.separatorChar).last())
+    val localPath = File(checkoutFolder + "tmpGitRepo")
     val git = cloneRemoteRepository(repositoryURL, localPath)
     //val git = openLocalRepository(File("tmpGitRepo/.git"))
     try {

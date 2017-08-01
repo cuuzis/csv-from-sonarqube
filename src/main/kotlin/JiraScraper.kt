@@ -9,7 +9,7 @@ private val parser = JSONParser()
 /*
 Saves all issues for a given project
  */
-fun saveJiraIssues(fileName: String, projectKey: String) {
+fun saveJiraIssues(fileName: String, projectJiraKey: String) {
 
     val header = listOf("key", "creation-date", "resolution-date", "resolution", "type", "priority", "open-issues", "closed-issues")
     val rows = mutableListOf<List<String>>()
@@ -17,7 +17,7 @@ fun saveJiraIssues(fileName: String, projectKey: String) {
 
     var startAt = 0
     do {
-        val jqlString = ("project=$projectKey" +
+        val jqlString = ("project=$projectJiraKey" +
                 " AND status in (Resolved,Closed)" +
                 " AND issuetype=Bug" +
                 " AND resolution=Fixed" +

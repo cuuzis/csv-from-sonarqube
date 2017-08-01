@@ -40,12 +40,12 @@ fun main(args: Array<String>) {
     saveMeasureHistory("measures.csv", projectKey, usefulMetricKeys)
     mergeMeasuresWithIssues(folderStr + "measures.csv", folderStr + "sonar-issues.csv", folderStr + "measures-and-issues.csv")
 
-    saveJiraIssues(folderStr + "jira-issues.csv", "CLI")
+    saveJiraIssues(folderStr + "jira-faults.csv", "CLI")
     saveGitCommits(folderStr + "git-commits.csv", "https://github.com/apache/commons-cli.git")
 
-    mergeFaultsAndSmells(folderStr + "git-commits.csv",folderStr + "jira-issues.csv",
-            folderStr + "sonar-issues.csv", folderStr + "faults-and-smells.csv")
-
+    mapFaultsToIssues(folderStr + "git-commits.csv",folderStr + "jira-faults.csv",
+            folderStr + "sonar-issues.csv", folderStr + "faults-and-issues.csv")
+    groupIssuesByFaults(folderStr + "faults-and-issues.csv", folderStr + "faults-issue-count.csv")
 
     println("Execution completed in ${(System.currentTimeMillis()-startTime)/1000.0} seconds (${(System.currentTimeMillis() - startTime)/60000} minutes)")
 }

@@ -67,8 +67,9 @@ fun mergeMeasuresWithIssues(measuresFile: String, issuesFile: String, combinedFi
 /*
 * Merges Jira issue (fault) with corresponding commit that closed it
 */
-fun mergeFaultsAndSmells(commitFile: String, faultFile: String, issuesFile: String, resultFile: String) {
+fun mapFaultsToIssues(commitFile: String, faultFile: String, issuesFile: String, resultFile: String) {
     val startTime = System.currentTimeMillis()
+    println("Mapping jira faults to sonar issues")
     val commitBeans = CsvToBeanBuilder<GitCommits>(FileReader(File(commitFile)))
             .withType(GitCommits::class.java).build().parse()
             .map { it as GitCommits }
@@ -78,7 +79,6 @@ fun mergeFaultsAndSmells(commitFile: String, faultFile: String, issuesFile: Stri
     val issueBeans = CsvToBeanBuilder<SonarIssues>(FileReader(File(issuesFile)))
             .withType(SonarIssues::class.java).build().parse()
             .map { it as SonarIssues }
-    println("Files parsed in ${(System.currentTimeMillis() - startTime)/1000.0}s")
 
     val rows = mutableListOf<MergedIssues>()
 
@@ -94,7 +94,7 @@ fun mergeFaultsAndSmells(commitFile: String, faultFile: String, issuesFile: Stri
         for (faultBean in faultsSolvedByCommit) {
             val issuesSolvedByCommit = issueBeans.filter {
                 it.updateDate == commitBean.sonarDate
-                && it.creationDate.toString() < faultBean.creationDate.toString() // needs && SZZ instead
+                        && it.creationDate.toString() < faultBean.creationDate.toString() // needs && SZZ instead
             }
             for (issueBean in issuesSolvedByCommit) {
                 rows.add(MergedIssues(
@@ -114,20 +114,21 @@ fun mergeFaultsAndSmells(commitFile: String, faultFile: String, issuesFile: Stri
     val beanToCsv = StatefulBeanToCsvBuilder<MergedIssues>(writer).build()
     rows.forEach { row -> beanToCsv.write(row) }
     writer.close()
+    println("Faults with issues saved to $resultFile in ${(System.currentTimeMillis() - startTime) / 1000.0} seconds")
+}
 
-    println("Merged in ${(System.currentTimeMillis() - startTime)/1000.0}s")
-    println("Merged result saved to $resultFile")
+/**
+ * Saves jira faults with the issue count at the time of closing
+ */
+fun groupIssuesByFaults(faultAndIssueFile: String, resultFile: String) {
+    val faultsAndIssues = CsvToBeanBuilder<MergedIssues>(FileReader(File(faultAndIssueFile)))
+            .withType(MergedIssues::class.java).build().parse()
+            .map { it as MergedIssues }
 
-
-
-    //TODO: make this a new function:
-    //groupFaultsAndIssues
-    val newFileName = "grouped-by-faults.csv"
     val faultKeys = mutableSetOf<String>()
-    rows.mapTo(faultKeys) { it.jiraKey.orEmpty() }
+    faultsAndIssues.mapTo(faultKeys) { it.jiraKey.orEmpty() }
     val issueKeys = mutableSetOf<String>()
-    rows.mapTo(issueKeys) { it.sonarRuleKey.orEmpty() }
-
+    faultsAndIssues.mapTo(issueKeys) { it.sonarRuleKey.orEmpty() }
 
     val header = listOf<String>("jira-key") + issueKeys
     val dataRows = mutableListOf<List<String>>()
@@ -138,7 +139,7 @@ fun mergeFaultsAndSmells(commitFile: String, faultFile: String, issuesFile: Stri
         for (issueKey in issueKeys)
             currentIssueCount[issueKey] = 0
 
-        val issuesForFault = rows.filter { it.jiraKey == jiraKey } // multiple commits for same fault?
+        val issuesForFault = faultsAndIssues.filter { it.jiraKey == jiraKey } // multiple commits for same fault?
         for (bean in issuesForFault) {
             currentIssueCount[bean.sonarRuleKey.orEmpty()] = currentIssueCount[bean.sonarRuleKey.orEmpty()]!! + 1
         }
@@ -146,11 +147,11 @@ fun mergeFaultsAndSmells(commitFile: String, faultFile: String, issuesFile: Stri
     }
 
     // save data to file
-    FileWriter(newFileName).use { fw ->
+    FileWriter(resultFile).use { fw ->
         val csvWriter = CSVWriter(fw)
         csvWriter.writeAll(dataRows.map { it.toTypedArray() })
-        println("Combined data saved to $newFileName")
     }
+    println("Faults with their sonar issue count saved to $resultFile")
 }
 
 /**
