@@ -159,29 +159,12 @@ fun saveNonemptyPastMeasures(fileName: String, projectKey: String, metricKeys: L
         }
         val measureResult = getStringFromUrl(query)
         val measureObject = parser.parse(measureResult) as JSONObject
-        val pagingObject = measureObject["paging"] as JSONObject
-        val measureCount = Integer.parseInt(pagingObject["total"].toString())
-        println("Measures found: $measureCount")
         val measureArray = measureObject["measures"] as JSONArray
         for (metricObject in measureArray.filterIsInstance<JSONObject>()) {
             val measureKey = metricObject["metric"].toString()
             val measureHistory = metricObject["history"] as JSONArray
-            if (measureHistory.isEmpty())
-                println("$measureKey : empty")
-            else {
-                println("$measureKey : values=${measureHistory.size}")
-                if (measureHistory.size > 1) {// && measureKey != "quality_profiles" && measureKey != "quality_gate_details") {
-                    /*if (measureKey == "quality_gate_details") {
-                        usefulMeasures.add("$measureKey-op")
-                        usefulMeasures.add("$measureKey-actual")
-                        usefulMeasures.add("$measureKey-period")
-                        usefulMeasures.add("$measureKey-metric")
-                        usefulMeasures.add("$measureKey-level")
-                        usefulMeasures.add("$measureKey-error")
-                        usefulMeasures.add("$measureKey-warning")
-                    }*/
-                    usefulMeasures.add(measureKey)
-                }
+            if (!measureHistory.isEmpty() && measureHistory.size > 1) {
+                usefulMeasures.add(measureKey)
             }
         }
     }
@@ -250,15 +233,15 @@ fun saveMeasureHistory(fileName: String, projectKey: String, metricKeys: List<St
     FileWriter(folderStr + fileName).use { fw ->
         val csvWriter = CSVWriter(fw)
         csvWriter.writeAll(rows.map { it.toTypedArray() })
-        println("Sonarqube measures saved to ${folderStr + fileName}")
     }
+    println("Sonarqube measures saved to ${folderStr + fileName}")
 }
 
 /*
 Saves issue history for a project in a .csv file
  */
 fun saveIssues(fileName: String, projectKey: String, statuses: String, ruleKeys: List<String>) {
-    print("Extracting issues for " + projectKey)
+    println("Extracting issues for " + projectKey)
     val startTime = System.currentTimeMillis()
     val folderStr = getProjectFolder(projectKey)
     makeEmptyFolder(folderStr)
@@ -267,7 +250,7 @@ fun saveIssues(fileName: String, projectKey: String, statuses: String, ruleKeys:
     rows.add(header)
 
     for (splitKeys in splitIntoBatches(ruleKeys, 40)) {
-        saveIssueRows(projectKey, statuses, splitKeys, rows)
+        saveIssueRows(projectKey, statuses, splitKeys, rows, null, null)
     }
 
     FileWriter(folderStr + fileName).use { fw ->
@@ -277,7 +260,7 @@ fun saveIssues(fileName: String, projectKey: String, statuses: String, ruleKeys:
     }
 }
 
-private fun saveIssueRows(componentKey: String, statuses: String, ruleKeys: List<String>, rows: MutableList<List<String>>) {
+private fun saveIssueRows(componentKey: String, statuses: String, ruleKeys: List<String>, rows: MutableList<List<String>>, createdAt: String?, createdAfter: String?) {
     val pageSize = 500
     var currentPage = 1
     var issuesQuery = "$sonarInstance/api/issues/search" +
@@ -287,22 +270,28 @@ private fun saveIssueRows(componentKey: String, statuses: String, ruleKeys: List
             "&rules=${ruleKeys.joinToString(",")}" +
             "&ps=$pageSize" +
             "&p=$currentPage"
+    if (createdAt != null)
+        issuesQuery += "&createdAt=${URLEncoder.encode(createdAt, "UTF-8")}"
+    if (createdAfter != null)
+        issuesQuery += "&createdAfter=${URLEncoder.encode(createdAfter, "UTF-8")}"
     val sonarResult = getStringFromUrl(issuesQuery)
     var mainObject = parser.parse(sonarResult) as JSONObject
     val totalIssues = Integer.valueOf(mainObject["total"].toString())
+    // if result size is too big, split it by rule keys and dates
     if (totalIssues > MAX_ELASTICSEARCH_RESULTS && ruleKeys.size > 1) {
-        // if result size is too big, split it
         for (splitKeys in splitIntoBatches(ruleKeys, ruleKeys.size/2)) {
-            saveIssueRows(componentKey, statuses, splitKeys, rows)
+            saveIssueRows(componentKey, statuses, splitKeys, rows, null, null)
         }
+    } else if (totalIssues > MAX_ELASTICSEARCH_RESULTS && ruleKeys.size == 1) {
+        val issuesArray = mainObject["issues"] as JSONArray
+        val firstIssue = issuesArray.filterIsInstance<JSONObject>().first()
+        val firstIssueDate = firstIssue["creationDate"].toString()
+        val afterFirstIssue = getSonarDateFromInstant(getInstantFromSonarDate(firstIssueDate).plusSeconds(1))
+        saveIssueRows(componentKey, statuses, ruleKeys, rows, firstIssueDate, null)
+        saveIssueRows(componentKey, statuses, ruleKeys, rows, null, afterFirstIssue)
     } else {
         if (totalIssues > MAX_ELASTICSEARCH_RESULTS)
             println("WARNING: only $MAX_ELASTICSEARCH_RESULTS of $totalIssues returned for ${ruleKeys.first()} in $componentKey")
-            //TODO:split by date
-        // save results
-        //var issuesArray = mainObject["issues"] as JSONArray
-        //var issuesArraySize = issuesArray.size
-        //println("Saving $issuesArraySize/${mainObject["total"]}")
         while (true) {
             // save row data
             val issuesArray = mainObject["issues"] as JSONArray
@@ -337,6 +326,10 @@ private fun saveIssueRows(componentKey: String, statuses: String, ruleKeys: List
                     "&rules=${ruleKeys.joinToString(",")}" +
                     "&ps=$pageSize" +
                     "&p=$currentPage"
+            if (createdAt != null)
+                issuesQuery += "&createdAt=${URLEncoder.encode(createdAt, "UTF-8")}"
+            if (createdAfter != null)
+                issuesQuery += "&createdAfter=${URLEncoder.encode(createdAfter, "UTF-8")}"
             val result = getStringFromUrl(issuesQuery)
             mainObject = parser.parse(result) as JSONObject
         }

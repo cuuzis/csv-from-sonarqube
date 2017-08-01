@@ -33,18 +33,18 @@ fun main(args: Array<String>) {
 
     //save history csv for "org.apache:commons-cli"
     val projectKey = "org.apache:commons-cli"
+    saveIssues("sonar-issues.csv", projectKey, "CLOSED,OPEN", ruleKeys)
     val folderStr = getProjectFolder(projectKey)
-    makeEmptyFolder(folderStr)
     saveNonemptyPastMeasures(folderStr + "nonempty-past-measures.txt", projectKey, metricKeys)
     val usefulMetricKeys = readListFromFile(folderStr + "nonempty-past-measures.txt")
-    saveMeasureHistory(fileName = "measures.csv", projectKey = projectKey, metricKeys = usefulMetricKeys)
-    saveIssues(fileName = "issues.csv", projectKey = projectKey, statuses = "CLOSED,OPEN", ruleKeys = ruleKeys)
-    mergeMeasuresWithIssues(measuresFile = folderStr + "measures.csv", issuesFile = folderStr + "issues.csv", combinedFile = folderStr + "measures-and-issues.csv")
+    saveMeasureHistory("measures.csv", projectKey, usefulMetricKeys)
+    mergeMeasuresWithIssues(folderStr + "measures.csv", folderStr + "sonar-issues.csv", folderStr + "measures-and-issues.csv")
 
     saveJiraIssues(folderStr + "jira-issues.csv", "CLI")
     saveGitCommits(folderStr + "git-commits.csv", "https://github.com/apache/commons-cli.git")
 
-    //mergeFaultsAndSmells("git-commits.csv","jira-issues.csv", "issues.csv", "faults-and-smells.csv")
+    mergeFaultsAndSmells(folderStr + "git-commits.csv",folderStr + "jira-issues.csv",
+            folderStr + "sonar-issues.csv", folderStr + "faults-and-smells.csv")
 
 
     println("Execution completed in ${(System.currentTimeMillis()-startTime)/1000.0} seconds (${(System.currentTimeMillis() - startTime)/60000} minutes)")
