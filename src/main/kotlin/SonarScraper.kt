@@ -143,6 +143,7 @@ private fun saveCurrentMeasuresAndIssues(projectKeys: List<String>, metricKeys: 
 Tests which past measures contain nonempty values for a given project.
 Stores the result in file.
  */
+//TODO: retrieve measures over 1000
 fun saveNonemptyPastMeasures(fileName: String, projectKey: String, metricKeys: List<String>) {
     val usefulMeasures = mutableListOf<String>()
     val measureQuery = "$sonarInstance/api/measures/search_history" +
@@ -238,7 +239,7 @@ fun saveMeasureHistory(fileName: String, projectKey: String, metricKeys: List<St
 }
 
 /*
-Saves issue history for a project in a .csv file
+Saves issue history for a project in a .csv file in a new empty folder
  */
 fun saveIssues(fileName: String, projectKey: String, statuses: String, ruleKeys: List<String>) {
     println("Extracting issues for " + projectKey)
@@ -289,6 +290,7 @@ private fun saveIssueRows(componentKey: String, statuses: String, ruleKeys: List
         val afterFirstIssue = getSonarDateFromInstant(getInstantFromSonarDate(firstIssueDate).plusSeconds(1))
         saveIssueRows(componentKey, statuses, ruleKeys, rows, firstIssueDate, null)
         saveIssueRows(componentKey, statuses, ruleKeys, rows, null, afterFirstIssue)
+        // TODO: Limit recursion (Exception in thread "main" java.lang.StackOverflowError for Apache Hive)
     } else {
         if (totalIssues > MAX_ELASTICSEARCH_RESULTS)
             println("WARNING: only $MAX_ELASTICSEARCH_RESULTS of $totalIssues returned for ${ruleKeys.first()} in $componentKey")

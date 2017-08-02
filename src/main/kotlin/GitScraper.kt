@@ -5,10 +5,12 @@ import org.eclipse.jgit.storage.file.FileRepositoryBuilder
 import java.io.FileWriter
 import java.time.Instant
 import java.time.temporal.ChronoUnit
+import org.eclipse.jgit.treewalk.CanonicalTreeParser
+
 
 fun saveGitCommits(fileName: String, repositoryURL: String) {
 
-    val header = listOf("git-date-original", "git-date-sonarqube", "git-hash", "git-message", "git-committer", "git-total-committers", "git-files-changed")
+    val header = listOf("git-date-original", "git-date-sonarqube", "git-hash", "git-message", "git-committer", "git-total-committers", "git-files")
     val rows = mutableListOf<List<String>>()
     rows.add(header)
 
@@ -16,7 +18,7 @@ fun saveGitCommits(fileName: String, repositoryURL: String) {
     val checkoutFolder = fileName.removeSuffix(fileName.split(File.separatorChar).last())
     val localPath = File(checkoutFolder + "tmpGitRepo")
     val git = cloneRemoteRepository(repositoryURL, localPath)
-    //val git = openLocalRepository(File("tmpGitRepo/.git"))
+    //val git = openLocalRepository(File(checkoutFolder + "tmpGitRepo/.git"))
     try {
         val logEntries = git.log()
                 .call()
@@ -36,7 +38,7 @@ fun saveGitCommits(fileName: String, repositoryURL: String) {
             row.add(log.committerIdent.emailAddress)
             totalCommitters.add(log.committerIdent.emailAddress)
             row.add(totalCommitters.size.toString())
-
+            row.add(getFilesAtRevision(log.name, git).joinToString(";"))
             rows.add(row)
         }
 
@@ -58,9 +60,28 @@ fun saveGitCommits(fileName: String, repositoryURL: String) {
         println("Could not delete '$localPath'")
 }
 
+/**
+ * Returns a list of files added to the tree.
+ */
+fun getFilesAtRevision(revisionHash: String, git: Git): List<String> {
+    val emptyTreeHash = "4b825dc642cb6eb9a060e54bf8d69288fbee4904"
+    val oldId = git.repository.resolve("$emptyTreeHash^{tree}")
+    val newId = git.repository.resolve("$revisionHash^{tree}")
+    val reader = git.repository.newObjectReader()
+    val oldTreeIter = CanonicalTreeParser()
+    oldTreeIter.reset(reader, oldId)
+    val newTreeIter = CanonicalTreeParser()
+    newTreeIter.reset(reader, newId)
+    val diffs = git.diff()
+            .setNewTree(newTreeIter)
+            .setOldTree(oldTreeIter)
+            .call()
+    return diffs.map { it.newPath }
+}
+
 fun cloneRemoteRepository(repositoryURL: String, directory: File): Git {
     try {
-        println("Cloning repository from $repositoryURL\n...")
+        println("Cloning repository from $repositoryURL ..")
         val result: Git = Git.cloneRepository()
                 .setURI(repositoryURL)
                 .setDirectory(directory)
