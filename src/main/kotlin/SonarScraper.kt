@@ -138,18 +138,63 @@ private fun saveCurrentMeasuresAndIssues(projectKeys: List<String>, metricKeys: 
     println("Measures and issues saved to $fileName")
 }
 
-
-/*
-Tests which past measures contain nonempty values for a given project.
-Stores the result in file.
+/**
+ * Saves past measures for a project in a .csv file
  */
-//TODO: retrieve measures over 1000
-fun saveNonemptyPastMeasures(fileName: String, projectKey: String, metricKeys: List<String>) {
+fun saveMeasureHistory(fileName: String, projectKey: String) {
+    val metricKeys = getNonemptyMetricKeys(projectKey)
+    val measureMap = sortedMapOf<String, Array<String>>()
+    val pageSize = 500
+    var currentPage = 0
+    do {
+        currentPage++
+        val measureQuery = "$sonarInstance/api/measures/search_history" +
+                "?component=" + projectKey +
+                "&ps=$pageSize" +
+                "&p=$currentPage" +
+                "&metrics=" + metricKeys.joinToString(",")
+
+        val measureResult = getStringFromUrl(measureQuery)
+        val mainObject = parser.parse(measureResult) as JSONObject
+        val pagingObject = mainObject["paging"] as JSONObject
+        val measureArray = mainObject["measures"] as JSONArray
+        for (metricObject in measureArray.filterIsInstance<JSONObject>()) {
+            val measureKey = metricObject["metric"].toString()
+            val measureHistory = metricObject["history"] as JSONArray
+            for (measureEntry in measureHistory.filterIsInstance<JSONObject>()) {
+                val date = getInstantFromSonarDate( measureEntry["date"].toString() ).toString()
+                val value = measureEntry["value"].toString()
+                measureMap.putIfAbsent(date, Array(metricKeys.size, init = { _ -> "0" }))
+                val valueArray = measureMap[date]
+                valueArray!![metricKeys.indexOf(measureKey)] = value
+            }
+        }
+    } while (pageSize * currentPage < pagingObject["total"].toString().toInt())
+
+    // save data to file
+    val header = listOf<String>("measure-date") + metricKeys
+    val rows = mutableListOf<List<String>>()
+    rows.add(header)
+    for ((key, values) in measureMap) {
+        rows.add((listOf(key) + values))
+    }
+    val folderStr = getProjectFolder(projectKey)
+    FileWriter(folderStr + fileName).use { fw ->
+        val csvWriter = CSVWriter(fw)
+        csvWriter.writeAll(rows.map { it.toTypedArray() })
+    }
+    println("Sonarqube measures saved to ${folderStr + fileName}")
+}
+
+/**
+ * Tests which past measures contain nonempty values and are therefore useful
+ */
+private fun getNonemptyMetricKeys(projectKey: String): List<String> {
     val usefulMeasures = mutableListOf<String>()
     val measureQuery = "$sonarInstance/api/measures/search_history" +
             "?component=$projectKey" +
             "&metrics="
-    val metricKeysLeft = metricKeys.toMutableList()
+    val metricKeysLeft = getMetricKeys().toMutableList()
     while (!metricKeysLeft.isEmpty()) {
         var query = measureQuery
         while (!metricKeysLeft.isEmpty() && (query.length + metricKeysLeft.first().length < MAX_URL_LENGTH)) {
@@ -169,73 +214,24 @@ fun saveNonemptyPastMeasures(fileName: String, projectKey: String, metricKeys: L
             }
         }
     }
-    println("Nonempty past measures: ${usefulMeasures.size}")
-
-    BufferedWriter(FileWriter(fileName)).use { bw ->
-        for (key in usefulMeasures) {
-            bw.write(key)
-            bw.newLine()
-        }
-    }
+    println("Nonempty are ${usefulMeasures.size} sonarqube measures: $usefulMeasures")
+    return usefulMeasures
 }
 
 /**
- * Returns all metrics available on the server
+ * Returns all measures available on the server
  */
-fun getMetricKeys(): List<String> {
-    println("Requesting metric keys")
+private fun getMetricKeys(): List<String> {
     val metricsQuery = "$sonarInstance/api/metrics/search?ps=1000"
     val metricsResult = getStringFromUrl(metricsQuery)
     val metricsObject = parser.parse(metricsResult) as JSONObject
     val metricsCount = Integer.parseInt(metricsObject["total"].toString())
-    println("Metrics found: $metricsCount")
     val metricsKeys = mutableListOf<String>()
     val metricsArray = metricsObject["metrics"] as JSONArray
     metricsArray.filterIsInstance<JSONObject>().mapTo(metricsKeys) { it["key"].toString() }
-    println(metricsKeys)
+    println("Found $metricsCount sonarqube measures: $metricsKeys")
     assert(metricsKeys.size == metricsCount)
     return metricsKeys
-}
-
-/*
-Saves past measures measures for a project in a .csv file
- */
-fun saveMeasureHistory(fileName: String, projectKey: String, metricKeys: List<String>) {
-    val measureQuery = "$sonarInstance/api/measures/search_history" +
-            "?component=" + projectKey +
-            "&ps=1000" +
-            "&metrics=" + metricKeys.joinToString(",")
-
-    val measureResult = getStringFromUrl(measureQuery)
-    val measureObject = parser.parse(measureResult) as JSONObject
-    val measureArray = measureObject["measures"] as JSONArray
-    val measureMap = sortedMapOf<String, Array<String>>()
-
-    for (metricObject in measureArray.filterIsInstance<JSONObject>()) {
-        val measureKey = metricObject["metric"].toString()
-        val measureHistory = metricObject["history"] as JSONArray
-        for (measureEntry in measureHistory.filterIsInstance<JSONObject>()) {
-            val date = getInstantFromSonarDate( measureEntry["date"].toString() ).toString()
-            val value = measureEntry["value"].toString()
-            measureMap.putIfAbsent(date, Array(metricKeys.size, init = { _ -> "0" }))
-            val valueArray = measureMap[date]
-            valueArray!![metricKeys.indexOf(measureKey)] = value
-        }
-    }
-
-    // save data to file
-    val header = listOf<String>("measure-date") + metricKeys
-    val rows = mutableListOf<List<String>>()
-    rows.add(header)
-    for ((key, values) in measureMap) {
-        rows.add((listOf(key) + values))
-    }
-    val folderStr = getProjectFolder(projectKey)
-    FileWriter(folderStr + fileName).use { fw ->
-        val csvWriter = CSVWriter(fw)
-        csvWriter.writeAll(rows.map { it.toTypedArray() })
-    }
-    println("Sonarqube measures saved to ${folderStr + fileName}")
 }
 
 /*

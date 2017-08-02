@@ -7,8 +7,7 @@ val workDir = "extraction" + File.separatorChar
 fun main(args: Array<String>) {
     val startTime = System.currentTimeMillis()
 
-    val metricKeys = getMetricKeys()
-    val ruleKeys = getRuleKeys()
+    //val ruleKeys = getRuleKeys()
 
     //val projectKeys = getProjectsContainingString("QC -")//QC - aspectj, QC - jboss, QC - jtopen
 
@@ -40,14 +39,12 @@ fun main(args: Array<String>) {
     for (project in projectList) {
         //saveIssues("sonar-issues.csv", project.sonarKey, "CLOSED,OPEN", ruleKeys)
         val folderStr = getProjectFolder(project.sonarKey)
-        //saveNonemptyPastMeasures(folderStr + "nonempty-past-measures.txt", project.sonarKey, metricKeys)
-        //val usefulMetricKeys = readListFromFile(folderStr + "nonempty-past-measures.txt")
-        //saveMeasureHistory("measures.csv", project.sonarKey, usefulMetricKeys)
+
+        saveMeasureHistory("measures.csv", project.sonarKey)
         //mergeMeasuresWithIssues(folderStr + "measures.csv", folderStr + "sonar-issues.csv", folderStr + "measures-and-issues.csv")
 
         //saveJiraIssues(folderStr + "jira-faults.csv", project.jiraKey)
-        saveGitCommits(folderStr + "git-commits.csv", project.gitLink)
-
+        //saveGitCommits(folderStr + "git-commits.csv", project.gitLink)
 
 
         //mapFaultsToIssues(folderStr + "git-commits.csv",folderStr + "jira-faults.csv", folderStr + "sonar-issues.csv", folderStr + "faults-and-issues.csv")
