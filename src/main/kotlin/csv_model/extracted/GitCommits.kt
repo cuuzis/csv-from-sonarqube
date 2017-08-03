@@ -8,4 +8,10 @@ class GitCommits(
         @CsvBindByName(column = "git-hash") val hash: String? = null,
         @CsvBindByName(column = "git-message") val message: String? = null,
         @CsvBindByName(column = "git-committer") val committer: String? = null,
-        @CsvBindByName(column = "git-total-committers") val totalCommitters: Int = 0)
+        @CsvBindByName(column = "git-total-committers") val totalCommitters: Int = 0,
+        @CsvBindByName(column = "git-changed-files") val changedFiles: String? = null) {
+
+    fun getChangedFilesList(): List<String> {
+        return changedFiles.orEmpty().split(";")
+    }
+}

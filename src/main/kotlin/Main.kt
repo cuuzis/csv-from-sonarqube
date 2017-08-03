@@ -7,7 +7,7 @@ val workDir = "extraction" + File.separatorChar
 fun main(args: Array<String>) {
     val startTime = System.currentTimeMillis()
 
-    //val ruleKeys = getRuleKeys()
+    val ruleKeys = getRuleKeys()
 
     //val projectKeys = getProjectsContainingString("QC -")//QC - aspectj, QC - jboss, QC - jtopen
 
@@ -37,14 +37,16 @@ fun main(args: Array<String>) {
     //projectList.add(HistoryProject("org.apache:lucene-core", "LUCENE", "https://github.com/apache/lucene-solr.git"))
 
     for (project in projectList) {
-        //saveIssues("sonar-issues.csv", project.sonarKey, "CLOSED,OPEN", ruleKeys)
+        saveIssues("sonar-issues.csv", project.sonarKey, "CLOSED,OPEN", ruleKeys)
         val folderStr = getProjectFolder(project.sonarKey)
 
-        saveMeasureHistory("measures.csv", project.sonarKey)
+        //saveMeasureHistory("measures.csv", project.sonarKey)
         //mergeMeasuresWithIssues(folderStr + "measures.csv", folderStr + "sonar-issues.csv", folderStr + "measures-and-issues.csv")
 
-        //saveJiraIssues(folderStr + "jira-faults.csv", project.jiraKey)
-        //saveGitCommits(folderStr + "git-commits.csv", project.gitLink)
+        saveJiraIssues(folderStr + "jira-faults.csv", project.jiraKey)
+        saveGitCommits(folderStr + "git-commits.csv", project.gitLink)
+
+        mapFaultFileCommit(folderStr + "sonar-issues.csv", folderStr + "jira-faults.csv", folderStr + "git-commits.csv", folderStr + "fault-file-commit.csv")
 
 
         //mapFaultsToIssues(folderStr + "git-commits.csv",folderStr + "jira-faults.csv", folderStr + "sonar-issues.csv", folderStr + "faults-and-issues.csv")

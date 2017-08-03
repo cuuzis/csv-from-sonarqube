@@ -242,7 +242,7 @@ fun saveIssues(fileName: String, projectKey: String, statuses: String, ruleKeys:
     val startTime = System.currentTimeMillis()
     val folderStr = getProjectFolder(projectKey)
     makeEmptyFolder(folderStr)
-    val header = listOf("creation-date", "update-date", "rule", "component")
+    val header = listOf("creation-date", "update-date", "rule", "component", "effort")
     val rows = mutableListOf<List<String>>()
     rows.add(header)
 
@@ -306,12 +306,13 @@ private fun saveIssueRows(componentKey: String, statuses: String, ruleKeys: List
                 val component = issueObject["component"].toString()
                 val classname = component.replaceFirst((componentKey + ":").toRegex(), "")
                 val status = issueObject["status"].toString()
+                val effortMinutes = effortToMinutes(issueObject["effort"].toString())
                 val closedDate =
                         if (status == "CLOSED")
                             updateDate
                         else
                             ""
-                rows.add(mutableListOf<String>(creationDate, closedDate, rule, classname))
+                rows.add(mutableListOf<String>(creationDate, closedDate, rule, classname, effortMinutes))
             }
             // get next page
             if (currentPage * pageSize >= totalIssues || currentPage >= 20)
@@ -331,6 +332,23 @@ private fun saveIssueRows(componentKey: String, statuses: String, ruleKeys: List
             val result = getStringFromUrl(issuesQuery)
             mainObject = parser.parse(result) as JSONObject
         }
+    }
+}
+
+/**
+ * Converts sonarqube effort (e.g. 1h30min or 5min) to minutes
+ */
+fun effortToMinutes(effortString: String): String {
+    try {
+        if (effortString == "" || effortString == "null")
+            return "0"
+        else {
+            val hours = Integer.valueOf(effortString.substringBefore("h", "0"))
+            val minutes = Integer.valueOf(effortString.substringAfter("h").substringBefore("min", "0"))
+            return (hours * 60 + minutes).toString()
+        }
+    } catch (e: Exception) {
+        throw Exception("Cannot parse sonarqube effort to minutes: \"$effortString\"", e)
     }
 }
 

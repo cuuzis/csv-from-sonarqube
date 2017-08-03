@@ -10,7 +10,15 @@ import org.eclipse.jgit.treewalk.CanonicalTreeParser
 
 fun saveGitCommits(fileName: String, repositoryURL: String) {
 
-    val header = listOf("git-date-original", "git-date-sonarqube", "git-hash", "git-message", "git-committer", "git-total-committers", "git-files")
+    val header = listOf(
+            "git-date-original",
+            "git-date-sonarqube",
+            "git-hash",
+            "git-message",
+            "git-committer",
+            "git-total-committers",
+            //"git-files-in-project",
+            "git-changed-files")
     val rows = mutableListOf<List<String>>()
     rows.add(header)
 
@@ -29,6 +37,8 @@ fun saveGitCommits(fileName: String, repositoryURL: String) {
         val logDatesSonarqube = smoothDates(logDatesRaw)
 
         val totalCommitters = mutableSetOf<String>()
+        val emptyTreeHash = "4b825dc642cb6eb9a060e54bf8d69288fbee4904"
+        var oldHash = emptyTreeHash
         for ((idx, log) in logEntries.withIndex()) {
             val row = mutableListOf<String>()
             row.add(Instant.ofEpochSecond(log.commitTime.toLong()).toString())
@@ -38,10 +48,11 @@ fun saveGitCommits(fileName: String, repositoryURL: String) {
             row.add(log.committerIdent.emailAddress)
             totalCommitters.add(log.committerIdent.emailAddress)
             row.add(totalCommitters.size.toString())
-            row.add(getFilesAtRevision(log.name, git).joinToString(";"))
+            //row.add(getFilesDiff(emptyTreeHash, log.name, git).joinToString(";")) // files in project
+            row.add(getFilesDiff(oldHash, log.name, git).joinToString(";"))
             rows.add(row)
+            oldHash = log.name
         }
-
     } finally {
         git.close()
     }
@@ -61,12 +72,11 @@ fun saveGitCommits(fileName: String, repositoryURL: String) {
 }
 
 /**
- * Returns a list of files added to the tree.
+ * Returns a list of files modified within this revision.
  */
-fun getFilesAtRevision(revisionHash: String, git: Git): List<String> {
-    val emptyTreeHash = "4b825dc642cb6eb9a060e54bf8d69288fbee4904"
-    val oldId = git.repository.resolve("$emptyTreeHash^{tree}")
-    val newId = git.repository.resolve("$revisionHash^{tree}")
+fun getFilesDiff(oldHash: String, newHash: String, git: Git): List<String> {
+    val oldId = git.repository.resolve("$oldHash^{tree}")
+    val newId = git.repository.resolve("$newHash^{tree}")
     val reader = git.repository.newObjectReader()
     val oldTreeIter = CanonicalTreeParser()
     oldTreeIter.reset(reader, oldId)
@@ -76,7 +86,7 @@ fun getFilesAtRevision(revisionHash: String, git: Git): List<String> {
             .setNewTree(newTreeIter)
             .setOldTree(oldTreeIter)
             .call()
-    return diffs.map { it.newPath }
+    return diffs.map { it.newPath }.filterNot { it == "/dev/null" }
 }
 
 fun cloneRemoteRepository(repositoryURL: String, directory: File): Git {

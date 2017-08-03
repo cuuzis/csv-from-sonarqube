@@ -507,3 +507,67 @@ fun readListFromFile(filename: String): List<String> {
     }
     return result
 }
+
+
+/**
+ * For each fault: finds commits that were fixing it and the changed .java files with their measures
+ */
+fun mapFaultFileCommit(issueFile: String, faultFile: String, commitFile: String, outFile: String) {
+    val commitBeans = CsvToBeanBuilder<GitCommits>(FileReader(File(commitFile)))
+            .withType(GitCommits::class.java).build().parse()
+            .map { it as GitCommits }
+    val faultBeans = CsvToBeanBuilder<JiraFaults>(FileReader(File(faultFile)))
+            .withType(JiraFaults::class.java).build().parse()
+            .map { it as JiraFaults }
+    val issueBeans = CsvToBeanBuilder<SonarIssues>(FileReader(File(issueFile)))
+            .withType(SonarIssues::class.java).build().parse()
+            .map { it as SonarIssues }
+
+    val issueRuleKeys = sortedSetOf<String>()
+    issueBeans.mapTo(issueRuleKeys) { it.ruleKey.orEmpty() }
+    val header = mutableListOf<String>("jira-key","git-hash","git-sonar-date","sonar-component","sonar-debt")
+    for (ruleKey in issueRuleKeys) {
+        header.add(ruleKey + "-closed")
+        header.add(ruleKey + "-opened")
+        header.add(ruleKey)
+    }
+    val rows = mutableListOf<Array<String>>(header.toTypedArray())
+    for (fault in faultBeans) {
+        val commits = getRelatedCommits(fault, commitBeans)
+        for (commit in commits) {
+            val changedFiles = commit.getChangedFilesList().filter { it.endsWith(".java") }
+            for (file in changedFiles) {
+                val issues = issueBeans.filter { it.component == file }
+                //val issuesClosedBefore = issues.filter { it.updateDate.orEmpty() < commit.sonarDate.orEmpty() }
+                //val issuesOpenedAfter = issues.filter { it.creationDate.orEmpty() > commit.sonarDate.orEmpty() }
+                val issuesOpenedAt = issues.filter { it.creationDate.orEmpty() == commit.sonarDate.orEmpty() }
+                val issuesClosedAt = issues.filter { it.updateDate.orEmpty() == commit.sonarDate.orEmpty() }
+                val issuesActiveAt = issues.filter { it.creationDate.orEmpty() <= commit.sonarDate.orEmpty() && (it.updateDate.orEmpty().isEmpty() || it.updateDate.orEmpty() > commit.sonarDate.orEmpty()) }
+                val technicalDebt = issuesActiveAt.sumBy { it.effort!! }
+                val row = mutableListOf<String>(
+                        fault.jiraKey.orEmpty(), commit.hash.orEmpty(), commit.sonarDate.orEmpty(), file, technicalDebt.toString())
+                for (ruleKey in issueRuleKeys) {
+                    val issuesForRuleClosed = issuesClosedAt.count { it.ruleKey.orEmpty() == ruleKey}
+                    val issuesForRuleOpened = issuesOpenedAt.count { it.ruleKey.orEmpty() == ruleKey}
+                    val issuesForRule = issuesActiveAt.count { it.ruleKey.orEmpty() == ruleKey}
+                    row.add(issuesForRuleClosed.toString())
+                    row.add(issuesForRuleOpened.toString())
+                    row.add(issuesForRule.toString())
+                }
+                rows.add(row.toTypedArray())
+            }
+        }
+    }
+    FileWriter(outFile).use { fw ->
+        val csvWriter = CSVWriter(fw)
+        csvWriter.writeAll(rows)
+    }
+}
+
+fun  getRelatedCommits(fault: JiraFaults, commitBeans: List<GitCommits>): List<GitCommits> {
+    return commitBeans.filter {
+        val commitMessage = it.message.orEmpty().toLowerCase()
+        val faultKey = fault.jiraKey.toString().toLowerCase()
+        commitMessage.contains("(\\W$faultKey\\W|^$faultKey\\W|\\W$faultKey\$)".toRegex())
+    }
+}
