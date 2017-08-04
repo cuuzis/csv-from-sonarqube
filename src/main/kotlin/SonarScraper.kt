@@ -343,9 +343,12 @@ fun effortToMinutes(effortString: String): String {
         if (effortString == "" || effortString == "null")
             return "0"
         else {
-            val hours = Integer.valueOf(effortString.substringBefore("h", "0"))
-            val minutes = Integer.valueOf(effortString.substringAfter("h").substringBefore("min", "0"))
-            return (hours * 60 + minutes).toString()
+            val days = Integer.valueOf(effortString.substringBefore("d","0"))
+            val hoursMinutesStr = effortString.substringAfter("d")
+            val hours = Integer.valueOf(hoursMinutesStr.substringBefore("h", "0"))
+            val minutesStr = hoursMinutesStr.substringAfter("h")
+            val minutes = Integer.valueOf(minutesStr.substringBefore("min", "0"))
+            return (days*8*60 + hours*60 + minutes).toString()
         }
     } catch (e: Exception) {
         throw Exception("Cannot parse sonarqube effort to minutes: \"$effortString\"", e)
