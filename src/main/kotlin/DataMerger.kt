@@ -513,6 +513,7 @@ fun readListFromFile(filename: String): List<String> {
  * For each fault: finds commits that were fixing it and the changed .java files with their measures
  */
 fun mapFaultFileCommit(issueFile: String, faultFile: String, commitFile: String, outFile: String) {
+    println("Mapping faults, commits, issues to files")
     val commitBeans = CsvToBeanBuilder<GitCommits>(FileReader(File(commitFile)))
             .withType(GitCommits::class.java).build().parse()
             .map { it as GitCommits }
@@ -562,6 +563,8 @@ fun mapFaultFileCommit(issueFile: String, faultFile: String, commitFile: String,
         val csvWriter = CSVWriter(fw)
         csvWriter.writeAll(rows)
     }
+    println("Mapped faults, commits, issues and files to saved to $outFile")
+    groupByFile(rows, outFile)
 }
 
 fun  getRelatedCommits(fault: JiraFaults, commitBeans: List<GitCommits>): List<GitCommits> {
@@ -571,3 +574,67 @@ fun  getRelatedCommits(fault: JiraFaults, commitBeans: List<GitCommits>): List<G
         commitMessage.contains("(\\W$faultKey\\W|^$faultKey\\W|\\W$faultKey\$)".toRegex())
     }
 }
+
+/**
+ * Aggregates faults, commits and issues, grouping them by files
+ */
+private fun groupByFile(faultsFilesCommits: MutableList<Array<String>>, outFile: String) {
+    println("Grouping faults, commits, issues by files")
+    val header = mutableListOf<String>("sonar-component", "commit-fault-count", "jira-faults", "fault-related-commits")
+
+    val inputHeader = faultsFilesCommits[0]
+    val componentIdx = inputHeader.indexOf("sonar-component")
+    val jiraKeyIdx = inputHeader.indexOf("jira-key")
+    val gitHashIdx = inputHeader.indexOf("git-hash")
+    val sonarDebtIdx = inputHeader.indexOf("sonar-debt")
+    for (idx in sonarDebtIdx..inputHeader.lastIndex) {
+        header.add(inputHeader[idx] + "-sum")
+        header.add(inputHeader[idx] + "-min")
+        header.add(inputHeader[idx] + "-max")
+        header.add(inputHeader[idx] + "-avg")
+    }
+
+    val inputRows = faultsFilesCommits.subList(1, faultsFilesCommits.size)
+
+    val rowsGroupedByFile = inputRows.groupBy { it[componentIdx] }
+    val rowCount = rowsGroupedByFile.mapValues { it.value.size }
+    val faultCount = rowsGroupedByFile.mapValues { it.value.distinctBy { it[jiraKeyIdx] }.count() }
+    val commitCount = rowsGroupedByFile.mapValues { it.value.distinctBy { it[gitHashIdx] }.count() }
+    val issueAggregations = mutableMapOf<Int, Aggregations>()
+    for (idx in sonarDebtIdx..inputHeader.lastIndex) {
+        val sum = rowsGroupedByFile.mapValues { it.value.sumBy { it[idx].toInt() } }
+        val min = rowsGroupedByFile.mapValues { it.value.minBy { it[idx].toInt() }!![idx].toInt() }
+        val max = rowsGroupedByFile.mapValues { it.value.maxBy { it[idx].toInt() }!![idx].toInt() }
+        val avg = rowsGroupedByFile.mapValues { it.value.sumBy { it[idx].toInt() } / it.value.size.toDouble() }
+        issueAggregations.put(idx, Aggregations(sum = sum, min = min, max = max, avg = avg))
+    }
+
+    val rows = mutableListOf<Array<String>>(header.toTypedArray())
+    for (componentKey in rowsGroupedByFile.keys) {
+        val row = mutableListOf<String>()
+        row.add(componentKey)
+        row.add(rowCount[componentKey].toString())
+        row.add(faultCount[componentKey].toString())
+        row.add(commitCount[componentKey].toString())
+        for (idx in sonarDebtIdx..inputHeader.lastIndex) {
+            row.add(issueAggregations[idx]!!.sum[componentKey].toString())
+            row.add(issueAggregations[idx]!!.min[componentKey].toString())
+            row.add(issueAggregations[idx]!!.max[componentKey].toString())
+            row.add(issueAggregations[idx]!!.avg[componentKey].toString())
+        }
+        rows.add(row.toTypedArray())
+    }
+
+    val fileName = outFile.replace(".csv", "-grouped.csv")
+    FileWriter(fileName).use { fw ->
+        val csvWriter = CSVWriter(fw)
+        csvWriter.writeAll(rows)
+    }
+    println("Grouped faults, commits, issues saved to $fileName")
+}
+
+private class Aggregations(
+        val sum: Map<String, Int>,
+        val avg: Map<String, Double>,
+        val min: Map<String, Int>,
+        val max: Map<String, Int>)
