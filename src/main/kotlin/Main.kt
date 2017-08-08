@@ -1,6 +1,7 @@
 import java.io.File
 
-val sonarInstance = "http://sonar.inf.unibz.it"
+val sonarInstance = "http://localhost:9000"
+//val sonarInstance = "http://sonar.inf.unibz.it"
 val workDir = "extraction" + File.separatorChar
 
 
@@ -31,23 +32,30 @@ fun main(args: Array<String>) {
 
 
     val projectList = mutableListOf<HistoryProject>()
-    projectList.add(HistoryProject("org.apache:commons-cli", "CLI", "https://github.com/apache/commons-cli.git"))
+    projectList.add(HistoryProject("sasabus","",""))
+    //projectList.add(HistoryProject("org.apache:commons-cli", "CLI", "https://github.com/apache/commons-cli.git"))
     //projectList.add(HistoryProject("org.apache:ambari", "AMBARI", "https://github.com/apache/ambari.git"))
     //projectList.add(HistoryProject("org.apache:hive", "HIVE", "https://github.com/apache/hive.git"))
     //projectList.add(HistoryProject("org.apache:lucene-core", "LUCENE", "https://github.com/apache/lucene-solr.git"))
 
     for (project in projectList) {
-        saveIssues("sonar-issues.csv", project.sonarKey, "CLOSED,OPEN", ruleKeys)
+
         val folderStr = getProjectFolder(project.sonarKey)
+        makeEmptyFolder(folderStr)
+        saveIssues(folderStr + "sonar-issues.csv", project.sonarKey, "CLOSED,OPEN", ruleKeys)
 
         //saveMeasureHistory("measures.csv", project.sonarKey)
         //mergeMeasuresWithIssues(folderStr + "measures.csv", folderStr + "sonar-issues.csv", folderStr + "measures-and-issues.csv")
 
-        saveJiraIssues(folderStr + "jira-faults.csv", project.jiraKey)
-        saveGitCommits(folderStr + "git-commits.csv", project.gitLink)
+        //saveJiraIssues(folderStr + "jira-faults.csv", project.jiraKey)
+        //saveGitCommits(folderStr + "git-commits.csv", project.gitLink)
 
-        mapFaultFileCommit(folderStr + "sonar-issues.csv", folderStr + "jira-faults.csv", folderStr + "git-commits.csv", folderStr + "fault-file-commit.csv")
-
+        //mapFaultFileCommit(folderStr + "sonar-issues.csv", folderStr + "jira-faults.csv", folderStr + "git-commits.csv", folderStr + "fault-file-commit.csv")
+        /*val rFileList = listOf(
+                "history-correlation-commits.R",
+                "history-correlation-faults.R")
+        rFileList.parallelStream().forEach { rFile -> runRscript(File(rFile), File(folderStr)) }*/
+        //runRscript(File("history-correlation-commits.R"), File(folderStr))
 
         //mapFaultsToIssues(folderStr + "git-commits.csv",folderStr + "jira-faults.csv", folderStr + "sonar-issues.csv", folderStr + "faults-and-issues.csv")
         //groupIssuesByFaults(folderStr + "faults-and-issues.csv", folderStr + "faults-issue-count.csv")
