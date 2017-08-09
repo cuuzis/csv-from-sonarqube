@@ -241,15 +241,15 @@ private fun getMetricKeys(): List<String> {
 fun saveIssues(fileName: String, componentKey: String, statuses: String, ruleKeys: List<String>) {
     println("Extracting issues for " + componentKey)
     val startTime = System.currentTimeMillis()
-    val rows = mutableListOf<Array<String>>()
-    val header = arrayOf("creation-date", "update-date", "rule", "component", "effort")
-    rows.add(header)
 
+    val header = arrayOf("creation-date", "update-date", "rule", "component", "effort")
+    val rows = mutableListOf<Array<String>>()
     saveIssuesForKeys(ruleKeys, componentKey, statuses, rows)
 
     FileWriter(fileName).use { fw ->
         val csvWriter = CSVWriter(fw)
-        csvWriter.writeAll(rows)
+        csvWriter.writeNext(header)
+        csvWriter.writeAll(rows.sortedBy { it[0] }) // sorted by "creation-date"
     }
     println("Sonarqube issues saved to $fileName, extraction took ${(System.currentTimeMillis()-startTime)/1000.0} seconds")
 }
@@ -258,16 +258,15 @@ fun saveIssues(fileName: String, componentKey: String, statuses: String, ruleKey
  * Saves issues to rows.
  */
 private fun saveIssuesForKeys(ruleKeys: List<String>, componentKey: String, statuses: String, rows: MutableList<Array<String>>) {
-    for (splitKeys in splitIntoBatches(ruleKeys, 40)) {
+    for (splitKeys in splitIntoBatches(ruleKeys, 20)) {
         var createdAfter = "&createdAfter=${URLEncoder.encode("1900-01-01T01:01:01+0100", "UTF-8")}"
         var issuesLeft = issuesAt(createdAfter, componentKey, statuses, splitKeys)
-        val issuesLeftTotal = Integer.valueOf(issuesLeft["total"].toString())
-        if (issuesLeftTotal > MAX_ELASTICSEARCH_RESULTS && ruleKeys.size > 1) { // split by rule keys
-            for (splitKeysSmaller in splitIntoBatches(ruleKeys, ruleKeys.size/2)) {
+        if (Integer.valueOf(issuesLeft["total"].toString()) > MAX_ELASTICSEARCH_RESULTS && ruleKeys.size > 1) { // split by rule keys
+            for (splitKeysSmaller in splitIntoBatches(splitKeys, ruleKeys.size/2)) {
                 saveIssuesForKeys(splitKeysSmaller, componentKey, statuses, rows)
             }
-        } else { // split by dates
-            while (issuesLeftTotal > MAX_ELASTICSEARCH_RESULTS) {
+        } else if (Integer.valueOf(issuesLeft["total"].toString()) > 0) {
+            while (Integer.valueOf(issuesLeft["total"].toString()) > MAX_ELASTICSEARCH_RESULTS) { // split by dates
                 val issuesArray = issuesLeft["issues"] as JSONArray
                 val firstIssue = issuesArray.filterIsInstance<JSONObject>().first()
                 val firstIssueDate = firstIssue["creationDate"].toString()
@@ -308,10 +307,6 @@ private fun saveIssuesAt(dateFilter: String, componentKey: String, statuses: Str
     var page = 0
     do {
         page++
-        if (page * pageSize > MAX_ELASTICSEARCH_RESULTS) {
-            println("WARNING: only $MAX_ELASTICSEARCH_RESULTS returned for ${ruleKeys.first()} in $componentKey")
-            break
-        }
         val issuesQuery = "$sonarInstance/api/issues/search" +
                 "?componentKeys=$componentKey" +
                 "&s=CREATION_DATE" +
@@ -320,6 +315,10 @@ private fun saveIssuesAt(dateFilter: String, componentKey: String, statuses: Str
                 dateFilter +
                 "&ps=$pageSize" +
                 "&p=$page"
+        if (page * pageSize > MAX_ELASTICSEARCH_RESULTS) {
+            println("WARNING: only $MAX_ELASTICSEARCH_RESULTS returned for $issuesQuery")
+            break
+        }
         val sonarResult = getStringFromUrl(issuesQuery)
         val mainObject = parser.parse(sonarResult) as JSONObject
         val totalIssues = Integer.valueOf(mainObject["total"].toString())
