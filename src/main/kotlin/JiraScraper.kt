@@ -45,8 +45,12 @@ fun saveJiraIssues(fileName: String, projectJiraKey: String) {
             val typeObject = fieldsObject["issuetype"] as JSONObject
             val type = typeObject["name"].toString()
 
-            val priorityObject = fieldsObject["priority"] as JSONObject
-            val priority = priorityObject["name"].toString()
+            val priorityObject = fieldsObject["priority"].toString()
+            val priority =
+                    if (priorityObject == "null")
+                        "null"
+                    else
+                        (fieldsObject["priority"] as JSONObject)["name"].toString()
 
             val row = mutableListOf<String>(key, creationDate, resolutionDate, resolution, type, priority)
             rows.add(row)
