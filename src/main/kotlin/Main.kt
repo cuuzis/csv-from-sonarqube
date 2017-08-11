@@ -1,7 +1,7 @@
 import java.io.File
 
-val sonarInstance = "http://localhost:9000"
-//val sonarInstance = "http://sonar.inf.unibz.it"
+//val sonarInstance = "http://localhost:9000"
+val sonarInstance = "http://sonar.inf.unibz.it"
 val workDir = "extraction" + File.separatorChar
 
 
@@ -32,33 +32,43 @@ fun main(args: Array<String>) {
 
 
     val projectList = mutableListOf<HistoryProject>()
-    projectList.add(HistoryProject("sasabus","",""))
-    //projectList.add(HistoryProject("org.apache:commons-cli", "CLI", "https://github.com/apache/commons-cli.git"))
+    //projectList.add(HistoryProject("sasabus","",""))
+    projectList.add(HistoryProject("org.apache:commons-cli", "CLI", "https://github.com/apache/commons-cli.git"))
     //projectList.add(HistoryProject("org.apache:ambari", "AMBARI", "https://github.com/apache/ambari.git"))
     //projectList.add(HistoryProject("org.apache:hive", "HIVE", "https://github.com/apache/hive.git"))
     //projectList.add(HistoryProject("org.apache:lucene-core", "LUCENE", "https://github.com/apache/lucene-solr.git"))
+    //projectList.add(HistoryProject("bcel", "BCEL", "https://github.com/apache/commons-bcel.git"))
 
     for (project in projectList) {
 
         val folderStr = getProjectFolder(project.sonarKey)
+        val issuesFile = folderStr + "sonar-issues.csv"
+        val measuresFile = folderStr + "measure-history.csv"
+        val measuresAndIssuesFile = folderStr + "measures-and-issues.csv"
+        val jiraFaultFile = folderStr + "jira-faults.csv"
+        val gitCommitFile = folderStr + "git-commits.csv"
+        val faultFileCommitFile = folderStr + "fault-file-commit.csv"
+        val faultsAndIssuesFile = folderStr + "faults-and-issues.csv"
+        val faultsIssueCountFile = folderStr + "faults-issue-count.csv"
+
         makeEmptyFolder(folderStr)
-        saveIssues(folderStr + "sonar-issues.csv", project.sonarKey, "CLOSED,OPEN", ruleKeys)
+        saveIssues(issuesFile, project.sonarKey, "CLOSED,OPEN", ruleKeys)
 
-        //saveMeasureHistory("measures.csv", project.sonarKey)
-        //mergeMeasuresWithIssues(folderStr + "measures.csv", folderStr + "sonar-issues.csv", folderStr + "measures-and-issues.csv")
+        saveMeasureHistory(measuresFile, project.sonarKey)
+        mergeMeasuresWithIssues(measuresFile, issuesFile, measuresAndIssuesFile)
 
-        //saveJiraIssues(folderStr + "jira-faults.csv", project.jiraKey)
-        //saveGitCommits(folderStr + "git-commits.csv", project.gitLink)
+        saveJiraIssues(jiraFaultFile, project.jiraKey)
+        saveGitCommits(gitCommitFile, project.gitLink)
 
-        //mapFaultFileCommit(folderStr + "sonar-issues.csv", folderStr + "jira-faults.csv", folderStr + "git-commits.csv", folderStr + "fault-file-commit.csv")
-        /*val rFileList = listOf(
+        mapFaultFileCommit(issuesFile, jiraFaultFile, gitCommitFile, measuresFile, faultFileCommitFile)
+        val rFileList = listOf(
                 "history-correlation-commits.R",
                 "history-correlation-faults.R")
-        rFileList.parallelStream().forEach { rFile -> runRscript(File(rFile), File(folderStr)) }*/
-        //runRscript(File("history-correlation-commits.R"), File(folderStr))
+        rFileList.parallelStream().forEach { rFile -> runRscript(File(rFile), File(folderStr)) }
+        runRscript(File("history-correlation-commits.R"), File(folderStr))
 
-        //mapFaultsToIssues(folderStr + "git-commits.csv",folderStr + "jira-faults.csv", folderStr + "sonar-issues.csv", folderStr + "faults-and-issues.csv")
-        //groupIssuesByFaults(folderStr + "faults-and-issues.csv", folderStr + "faults-issue-count.csv")
+        mapFaultsToIssues(gitCommitFile, jiraFaultFile, issuesFile, faultsAndIssuesFile)
+        groupIssuesByFaults(faultsAndIssuesFile, faultsIssueCountFile)
     }
 
     println("Execution completed in ${(System.currentTimeMillis()-startTime)/1000.0} seconds (${(System.currentTimeMillis() - startTime)/60000} minutes)")

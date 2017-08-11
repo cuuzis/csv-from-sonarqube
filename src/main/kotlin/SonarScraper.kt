@@ -178,12 +178,11 @@ fun saveMeasureHistory(fileName: String, projectKey: String) {
     for ((key, values) in measureMap) {
         rows.add((listOf(key) + values))
     }
-    val folderStr = getProjectFolder(projectKey)
-    FileWriter(folderStr + fileName).use { fw ->
+    FileWriter(fileName).use { fw ->
         val csvWriter = CSVWriter(fw)
         csvWriter.writeAll(rows.map { it.toTypedArray() })
     }
-    println("Sonarqube measures saved to ${folderStr + fileName}")
+    println("Sonarqube measures saved to $fileName")
 }
 
 /**

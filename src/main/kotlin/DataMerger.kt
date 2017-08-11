@@ -512,8 +512,8 @@ fun readListFromFile(filename: String): List<String> {
 /**
  * For each fault: finds commits that were fixing it and the changed .java files with their measures
  */
-fun mapFaultFileCommit(issueFile: String, faultFile: String, commitFile: String, outFile: String) {
-    println("Mapping faults, commits, issues to files")
+fun mapFaultFileCommit(issueFile: String, faultFile: String, commitFile: String, measureFile: String, outFile: String) {
+    println("Mapping faults, commits, sonar-issues to files")
     val commitBeans = CsvToBeanBuilder<GitCommits>(FileReader(File(commitFile)))
             .withType(GitCommits::class.java).build().parse()
             .map { it as GitCommits }
@@ -524,6 +524,11 @@ fun mapFaultFileCommit(issueFile: String, faultFile: String, commitFile: String,
             .withType(SonarIssues::class.java).build().parse()
             .map { it as SonarIssues }
 
+    val summary = mutableMapOf<String, String>()
+    summary.put("total-commits", commitBeans.size.toString())
+    summary.put("total-faults", faultBeans.size.toString())
+    summary.put("total-sonar-issues", issueBeans.size.toString())
+
     val issueRuleKeys = sortedSetOf<String>()
     issueBeans.mapTo(issueRuleKeys) { it.ruleKey.orEmpty() }
     val header = mutableListOf<String>("jira-key","git-hash","git-sonar-date","sonar-component","sonar-debt")
@@ -532,7 +537,7 @@ fun mapFaultFileCommit(issueFile: String, faultFile: String, commitFile: String,
         header.add(ruleKey + "-opened")
         header.add(ruleKey)
     }
-    val rows = mutableListOf<Array<String>>(header.toTypedArray())
+    val rows = mutableListOf<Array<String>>()
     for (fault in faultBeans) {
         val commits = getRelatedCommits(fault, commitBeans)
         for (commit in commits) {
@@ -561,10 +566,18 @@ fun mapFaultFileCommit(issueFile: String, faultFile: String, commitFile: String,
     }
     FileWriter(outFile).use { fw ->
         val csvWriter = CSVWriter(fw)
+        csvWriter.writeNext(header.toTypedArray())
         csvWriter.writeAll(rows)
     }
     println("Mapped faults, commits, issues and files to saved to $outFile")
-    groupByFile(rows, outFile)
+
+    summary.put("mapped-commits", rows.distinctBy { it[1] }.count().toString())
+    summary.put("mapped-faults", rows.distinctBy { it[0] }.count().toString() )
+    summary.put("analysis-count", (readListFromFile(measureFile).size - 1).toString())
+    summary.put("analysis-first-date", issueBeans.minBy { it.creationDate.orEmpty() }!!.creationDate!!)
+    summary.put("analysis-last-date", issueBeans.maxBy { it.creationDate.orEmpty() }!!.creationDate!!)
+
+    groupByFile(header.toTypedArray(), rows, outFile, summary)
 }
 
 fun  getRelatedCommits(fault: JiraFaults, commitBeans: List<GitCommits>): List<GitCommits> {
@@ -578,11 +591,10 @@ fun  getRelatedCommits(fault: JiraFaults, commitBeans: List<GitCommits>): List<G
 /**
  * Aggregates faults, commits and issues, grouping them by files
  */
-private fun groupByFile(faultsFilesCommits: MutableList<Array<String>>, outFile: String) {
+private fun groupByFile(inputHeader: Array<String>, inputRows: MutableList<Array<String>>, outFile: String, summary: MutableMap<String, String>) {
     println("Grouping faults, commits, issues by files")
     val header = mutableListOf<String>("sonar-component", "commit-fault-count", "jira-faults", "fault-related-commits")
 
-    val inputHeader = faultsFilesCommits[0]
     val componentIdx = inputHeader.indexOf("sonar-component")
     val jiraKeyIdx = inputHeader.indexOf("jira-key")
     val gitHashIdx = inputHeader.indexOf("git-hash")
@@ -593,8 +605,6 @@ private fun groupByFile(faultsFilesCommits: MutableList<Array<String>>, outFile:
         header.add(inputHeader[idx] + "-max")
         header.add(inputHeader[idx] + "-avg")
     }
-
-    val inputRows = faultsFilesCommits.subList(1, faultsFilesCommits.size)
 
     val rowsGroupedByFile = inputRows.groupBy { it[componentIdx] }
     val rowCount = rowsGroupedByFile.mapValues { it.value.size }
@@ -609,7 +619,7 @@ private fun groupByFile(faultsFilesCommits: MutableList<Array<String>>, outFile:
         issueAggregations.put(idx, Aggregations(sum = sum, min = min, max = max, avg = avg))
     }
 
-    val rows = mutableListOf<Array<String>>(header.toTypedArray())
+    val rows = mutableListOf<Array<String>>()
     for (componentKey in rowsGroupedByFile.keys) {
         val row = mutableListOf<String>()
         row.add(componentKey)
@@ -628,9 +638,19 @@ private fun groupByFile(faultsFilesCommits: MutableList<Array<String>>, outFile:
     val fileName = outFile.replace(".csv", "-grouped.csv")
     FileWriter(fileName).use { fw ->
         val csvWriter = CSVWriter(fw)
+        csvWriter.writeNext(header.toTypedArray())
         csvWriter.writeAll(rows)
     }
     println("Grouped faults, commits, issues saved to $fileName")
+    summary.put("files-affected", rows.size.toString())
+    println(summary)
+    FileWriter(fileName.replace(".csv","-summary.csv")).use { fw ->
+        val keys = summary.keys.toString()
+        val values = summary.values.toString()
+        fw.write(keys.substring(1, keys.lastIndex))
+        fw.write(System.lineSeparator())
+        fw.write(values.substring(1, values.lastIndex))
+    }
 }
 
 private class Aggregations(
