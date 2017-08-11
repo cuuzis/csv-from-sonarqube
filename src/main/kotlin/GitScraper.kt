@@ -1,15 +1,17 @@
 import com.opencsv.CSVWriter
 import java.io.File
 import org.eclipse.jgit.api.Git
+import org.eclipse.jgit.errors.MissingObjectException
 import org.eclipse.jgit.storage.file.FileRepositoryBuilder
 import java.io.FileWriter
 import java.time.Instant
 import java.time.temporal.ChronoUnit
 import org.eclipse.jgit.treewalk.CanonicalTreeParser
 
+private val emptyTreeHash = "4b825dc642cb6eb9a060e54bf8d69288fbee4904"
 
 fun saveGitCommits(fileName: String, repositoryURL: String) {
-
+    println("Saving git commits")
     val header = listOf(
             "git-date-original",
             "git-date-sonarqube",
@@ -37,7 +39,6 @@ fun saveGitCommits(fileName: String, repositoryURL: String) {
         val logDatesSonarqube = smoothDates(logDatesRaw)
 
         val totalCommitters = mutableSetOf<String>()
-        val emptyTreeHash = "4b825dc642cb6eb9a060e54bf8d69288fbee4904"
         var oldHash = emptyTreeHash
         for ((idx, log) in logEntries.withIndex()) {
             val row = mutableListOf<String>()
@@ -75,18 +76,26 @@ fun saveGitCommits(fileName: String, repositoryURL: String) {
  * Returns a list of files modified within this revision.
  */
 fun getFilesDiff(oldHash: String, newHash: String, git: Git): List<String> {
-    val oldId = git.repository.resolve("$oldHash^{tree}")
-    val newId = git.repository.resolve("$newHash^{tree}")
-    val reader = git.repository.newObjectReader()
-    val oldTreeIter = CanonicalTreeParser()
-    oldTreeIter.reset(reader, oldId)
-    val newTreeIter = CanonicalTreeParser()
-    newTreeIter.reset(reader, newId)
-    val diffs = git.diff()
-            .setNewTree(newTreeIter)
-            .setOldTree(oldTreeIter)
-            .call()
-    return diffs.map { it.newPath }.filterNot { it == "/dev/null" }
+    try {
+        val oldId = git.repository.resolve("$oldHash^{tree}")
+        val newId = git.repository.resolve("$newHash^{tree}")
+        val reader = git.repository.newObjectReader()
+        val oldTreeIter = CanonicalTreeParser()
+        oldTreeIter.reset(reader, oldId)
+        val newTreeIter = CanonicalTreeParser()
+        newTreeIter.reset(reader, newId)
+        val diffs = git.diff()
+                .setNewTree(newTreeIter)
+                .setOldTree(oldTreeIter)
+                .call()
+        return diffs.map { it.newPath }.filterNot { it == "/dev/null" }
+
+    } catch (error: MissingObjectException) {
+        if (oldHash == emptyTreeHash)
+            return listOf()
+        else
+            throw error
+    }
 }
 
 fun cloneRemoteRepository(repositoryURL: String, directory: File): Git {
