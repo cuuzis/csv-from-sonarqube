@@ -17,7 +17,7 @@ fun saveJiraIssues(fileName: String, projectJiraKey: String) {
 
     var startAt = 0
     do {
-        val jqlString = ("project=$projectJiraKey" +
+        val jqlString = ("project=\"$projectJiraKey\"" +
                 " AND status in (Resolved,Closed)" +
                 " AND issuetype=Bug" +
                 " AND resolution=Fixed" +
