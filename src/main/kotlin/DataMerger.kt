@@ -9,6 +9,8 @@ import csv_model.extracted.JiraFaults
 import csv_model.merged.MergedIssues
 import csv_model.extracted.SonarIssues
 import java.io.*
+import java.time.OffsetDateTime
+import java.time.temporal.ChronoUnit
 
 
 /*
@@ -16,6 +18,7 @@ Merges the list of issues with the measure history,
 grouping issues together by date and rule key
  */
 fun mergeMeasuresWithIssues(measuresFile: String, issuesFile: String, combinedFile: String) {
+    println("Merging measures and issues")
     val ruleKeys = mutableSetOf<String>()
     val issuesByDateOpened = mutableMapOf<String, MutableList<String>>()
     val issuesByDateClosed = mutableMapOf<String, MutableList<String>>()
@@ -60,8 +63,8 @@ fun mergeMeasuresWithIssues(measuresFile: String, issuesFile: String, combinedFi
     FileWriter(combinedFile).use { fw ->
         val csvWriter = CSVWriter(fw)
         csvWriter.writeAll(rows.map { it.toTypedArray() })
-        println("Combined data saved to $combinedFile")
     }
+    println("Measures and issues merged in $combinedFile")
 }
 
 /*
@@ -512,7 +515,7 @@ fun readListFromFile(filename: String): List<String> {
 /**
  * For each fault: finds commits that were fixing it and the changed .java files with their measures
  */
-fun mapFaultFileCommit(issueFile: String, faultFile: String, commitFile: String, measureFile: String, outFile: String) {
+fun mapFaultFileCommit(issueFile: String, faultFile: String, commitFile: String, measureFile: String, outFile: String, groupByDay: Boolean) {
     println("Mapping faults, commits, sonar-issues to files")
     val commitBeans = CsvToBeanBuilder<GitCommits>(FileReader(File(commitFile)))
             .withType(GitCommits::class.java).build().parse()
@@ -523,6 +526,7 @@ fun mapFaultFileCommit(issueFile: String, faultFile: String, commitFile: String,
     val issueBeans = CsvToBeanBuilder<SonarIssues>(FileReader(File(issueFile)))
             .withType(SonarIssues::class.java).build().parse()
             .map { it as SonarIssues }
+            //.filterNot { it.ruleKey == "squid:S00117" }
 
     val summary = mutableMapOf<String, String>()
     summary.put("total-commits", commitBeans.size.toString())
@@ -542,16 +546,40 @@ fun mapFaultFileCommit(issueFile: String, faultFile: String, commitFile: String,
         val commits = getRelatedCommits(fault, commitBeans)
         for (commit in commits) {
             val changedFiles = commit.getChangedFilesList().filter { it.endsWith(".java") }
+            val commitSonarDate = if (groupByDay) {
+                OffsetDateTime.parse(commit.sonarDate.orEmpty()).toInstant()
+                        .truncatedTo(ChronoUnit.DAYS)
+                        .plus(1, ChronoUnit.DAYS).toString()
+            } else {
+                commit.sonarDate.orEmpty()
+            }
             for (file in changedFiles) {
-                val issues = issueBeans.filter { it.component == file }
-                //val issuesClosedBefore = issues.filter { it.updateDate.orEmpty() < commit.sonarDate.orEmpty() }
-                //val issuesOpenedAfter = issues.filter { it.creationDate.orEmpty() > commit.sonarDate.orEmpty() }
-                val issuesOpenedAt = issues.filter { it.creationDate.orEmpty() == commit.sonarDate.orEmpty() }
-                val issuesClosedAt = issues.filter { it.updateDate.orEmpty() == commit.sonarDate.orEmpty() }
-                val issuesActiveAt = issues.filter { it.creationDate.orEmpty() <= commit.sonarDate.orEmpty() && (it.updateDate.orEmpty().isEmpty() || it.updateDate.orEmpty() > commit.sonarDate.orEmpty()) }
+                var issues = issueBeans.filter { it.component == file }
+                if (groupByDay)
+                    issues = issues.map {
+                        SonarIssues(
+                                creationDate = if (it.creationDate.orEmpty() != "")
+                                    OffsetDateTime.parse(it.creationDate.orEmpty()).toInstant()
+                                            .truncatedTo(ChronoUnit.DAYS).toString()
+                                    else
+                                        "",
+                                updateDate = if (it.updateDate.orEmpty() != "")
+                                    OffsetDateTime.parse(it.updateDate.orEmpty()).toInstant()
+                                            .truncatedTo(ChronoUnit.DAYS).toString()
+                                else
+                                    "",
+                                component = it.component,
+                                effort = it.effort,
+                                ruleKey = it.ruleKey)
+                    }
+                //val issuesClosedBefore = issues.filter { it.updateDate.orEmpty() < commitSonarDate }
+                //val issuesOpenedAfter = issues.filter { it.creationDate.orEmpty() > commitSonarDate }
+                val issuesOpenedAt = issues.filter { it.creationDate.orEmpty() == commitSonarDate }
+                val issuesClosedAt = issues.filter { it.updateDate.orEmpty() == commitSonarDate }
+                val issuesActiveAt = issues.filter { it.creationDate.orEmpty() <= commitSonarDate && (it.updateDate.orEmpty().isEmpty() || it.updateDate.orEmpty() > commitSonarDate) }
                 val technicalDebt = issuesActiveAt.sumBy { it.effort!! }
                 val row = mutableListOf<String>(
-                        fault.jiraKey.orEmpty(), commit.hash.orEmpty(), commit.sonarDate.orEmpty(), file, technicalDebt.toString())
+                        fault.jiraKey.orEmpty(), commit.hash.orEmpty(), commitSonarDate, file, technicalDebt.toString())
                 for (ruleKey in issueRuleKeys) {
                     val issuesForRuleClosed = issuesClosedAt.count { it.ruleKey.orEmpty() == ruleKey}
                     val issuesForRuleOpened = issuesOpenedAt.count { it.ruleKey.orEmpty() == ruleKey}
@@ -573,7 +601,8 @@ fun mapFaultFileCommit(issueFile: String, faultFile: String, commitFile: String,
 
     summary.put("mapped-commits", rows.distinctBy { it[1] }.count().toString())
     summary.put("mapped-faults", rows.distinctBy { it[0] }.count().toString() )
-    summary.put("analysis-count", (readListFromFile(measureFile).size - 1).toString())
+    summary.put("analysis", (readListFromFile(measureFile).size - 1).toString())
+    //summary.put("analysis-with-closed-faults", (readListFromFile(measureFile).size - 1).toString())
     summary.put("analysis-first-date", issueBeans.minBy { it.creationDate.orEmpty() }!!.creationDate!!)
     summary.put("analysis-last-date", issueBeans.maxBy { it.creationDate.orEmpty() }!!.creationDate!!)
 
@@ -644,7 +673,7 @@ private fun groupByFile(inputHeader: Array<String>, inputRows: MutableList<Array
     println("Grouped faults, commits, issues saved to $fileName")
     summary.put("files-affected", rows.size.toString())
     println(summary)
-    FileWriter(fileName.replace(".csv","-summary.csv")).use { fw ->
+    FileWriter(fileName.replace("-grouped.csv","-summary.csv")).use { fw ->
         val keys = summary.keys.toString()
         val values = summary.values.toString()
         fw.write(keys.substring(1, keys.lastIndex))
