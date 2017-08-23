@@ -166,7 +166,7 @@ fun groupIssuesByFaults(faultAndIssueFile: String, resultFile: String) {
  *     B         -          1
  *     C         1          -
  */
-fun mapIssuesToCyclicDependencies(projectKeys: List<String>) {
+fun mapIssuesToCyclicDependencies(projectKeys: List<String>, groupByTaxonomy: Boolean) {
     for (projectKey in projectKeys) {
         val folderStr = getProjectFolder(projectKey)
         val archCycleSmellFile = findArchitectureSmellFile(projectKey, "classCyclesShapeTable.csv")
@@ -174,17 +174,26 @@ fun mapIssuesToCyclicDependencies(projectKeys: List<String>) {
                 outputByClass = folderStr + "cycles-issues-by-class.csv",
                 outputByCycle = folderStr + "cycles-issues-by-cycle.csv",
                 issueFile = folderStr + "current-issues.csv",
-                cyclicDependencyFile = archCycleSmellFile)
+                cyclicDependencyFile = archCycleSmellFile,
+                groupByTaxonomy = groupByTaxonomy)
     }
 }
 
-private fun mergeIssuesWithCyclicDependencies(outputByClass: String, outputByCycle: String, issueFile: String, cyclicDependencyFile: File) {
+private fun mergeIssuesWithCyclicDependencies(outputByClass: String, outputByCycle: String, issueFile: String, cyclicDependencyFile: File, groupByTaxonomy: Boolean) {
     println("Merging cyclic dependencies and sonar issues")
     val startTime = System.currentTimeMillis()
     // read code smells
-    val issueBeans = CsvToBeanBuilder<SonarIssues>(FileReader(File(issueFile)))
+    var issueBeans = CsvToBeanBuilder<SonarIssues>(FileReader(File(issueFile)))
             .withType(SonarIssues::class.java).build().parse()
             .map { it as SonarIssues }
+    if (groupByTaxonomy)
+        issueBeans = issueBeans.map {
+            SonarIssues(creationDate = it.creationDate,
+                    updateDate = it.updateDate,
+                    ruleKey = ruleTaxonomyGroup(it.ruleKey.orEmpty()),
+                    effort = it.effort,
+                    component = it.component)
+        }
 
     val issueRuleKeys = sortedSetOf<String>()
     issueBeans.mapTo(issueRuleKeys) { it.ruleKey.orEmpty() }
@@ -315,26 +324,64 @@ private fun mergeIssuesWithCyclicDependencies(outputByClass: String, outputByCyc
 }
 
 /**
+ * Returns the taxonomy name of a code smell rule. If code smell is not in taxonomy, returns its key.
+ */
+private fun ruleTaxonomyGroup(ruleKey: String): String {
+    when (ruleKey) {
+        "code_smells:long_method",
+        "code_smells:complex_class",
+        "code_smells:long_parameter_list",
+        "code_smells:many_field_attributes_not_complex",
+        "code_smells:blob_class",
+        "code_smells:large_class" ->
+            return "The Bloaters"
+
+        "code_smells:antisingleton" ->
+            return "The Object-Orientation Abusers"
+
+        "code_smells:lazy_class",
+        "common-java:DuplicatedBlocks" ->
+            return "The Dispensables"
+
+        "code_smells:class_data_private",
+        "code_smells:message_chains" ->
+            return "The Encapsulators"
+
+        else ->
+            return ruleKey
+    }
+}
+
+/**
  * Merges architecture MAS and code issues by packages
  */
-fun mapIssuesToMAS(projectKeys: List<String>) {
+fun mapIssuesToMAS(projectKeys: List<String>, groupByTaxonomy: Boolean) {
     for (projectKey in projectKeys) {
         val folderStr = getProjectFolder(projectKey)
         val archMasFile = findArchitectureSmellFile(projectKey, "mas.csv")
         mergeIssuesWithMAS(
                 outputFile = folderStr + "mas-issues-by-package.csv",
                 issueFile = folderStr + "current-issues.csv",
-                masFile = archMasFile)
+                masFile = archMasFile,
+                groupByTaxonomy = groupByTaxonomy)
     }
 }
 
-private fun mergeIssuesWithMAS(outputFile: String, issueFile: String, masFile: File) {
+private fun mergeIssuesWithMAS(outputFile: String, issueFile: String, masFile: File, groupByTaxonomy: Boolean) {
     println("Merging MAS and sonar issues")
     val startTime = System.currentTimeMillis()
     // read code smells
-    val issueBeans = CsvToBeanBuilder<SonarIssues>(FileReader(File(issueFile)))
+    var issueBeans = CsvToBeanBuilder<SonarIssues>(FileReader(File(issueFile)))
             .withType(SonarIssues::class.java).build().parse()
             .map { it as SonarIssues }
+    if (groupByTaxonomy)
+        issueBeans = issueBeans.map {
+            SonarIssues(creationDate = it.creationDate,
+                    updateDate = it.updateDate,
+                    ruleKey = ruleTaxonomyGroup(it.ruleKey.orEmpty()),
+                    effort = it.effort,
+                    component = it.component)
+        }
 
     val issueRuleKeys = sortedSetOf<String>()
     issueBeans.mapTo(issueRuleKeys) { it.ruleKey.orEmpty() }
