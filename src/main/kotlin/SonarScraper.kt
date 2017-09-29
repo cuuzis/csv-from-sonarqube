@@ -57,6 +57,47 @@ fun  getProjectsContainingString(partOfName: String): List<String> {
     return componentArray.filterIsInstance<JSONObject>().map { it["key"].toString() }
 }
 
+/**
+ * Saves current measures for a project in a .csv file
+ */
+fun saveCurrentMeasures(fileName: String, projectKey: String) {
+    val measureMap = mutableMapOf<String,String>()
+    measureMap.put("_project",projectKey)
+    val measureQuery = "$sonarInstance/api/measures/component" +
+            "?componentKey=$projectKey" +
+            "&metricKeys="
+    val metricKeysLeft = getMetricKeys().toMutableList()
+    while (!metricKeysLeft.isEmpty()) {
+        var query = measureQuery
+        while (!metricKeysLeft.isEmpty() && (query.length + metricKeysLeft.first().length < MAX_URL_LENGTH)) {
+            if (query == measureQuery)
+                query += metricKeysLeft.removeAt(0)
+            else
+                query += "," + metricKeysLeft.removeAt(0)
+        }
+        val measureResult = getStringFromUrl(query)
+        val mainObject = parser.parse(measureResult) as JSONObject
+        val measureObject = mainObject["component"] as JSONObject
+        val measureArray = measureObject["measures"] as JSONArray
+        for (metricObject in measureArray.filterIsInstance<JSONObject>()) {
+            val measureKey = metricObject["metric"].toString()
+            val measureValue = metricObject["value"].toString()
+            measureMap.put(measureKey, measureValue)
+        }
+    }
+
+    // save data to file
+    val measureMapOrdered = measureMap.toSortedMap()
+    val header = measureMapOrdered.keys
+    val row = measureMapOrdered.values
+    FileWriter(fileName).use { fw ->
+        val csvWriter = CSVWriter(fw)
+        csvWriter.writeNext(header.toTypedArray())
+        csvWriter.writeNext(row.toTypedArray())
+    }
+    println("Sonarqube current measures saved to $fileName")
+}
+
 /*
 Saves in a .csv file all of the current measures and issues for given projects
  */
@@ -182,7 +223,7 @@ fun saveMeasureHistory(fileName: String, projectKey: String) {
         val csvWriter = CSVWriter(fw)
         csvWriter.writeAll(rows.map { it.toTypedArray() })
     }
-    println("Sonarqube measures saved to $fileName")
+    println("Sonarqube measure history saved to $fileName")
 }
 
 /**
