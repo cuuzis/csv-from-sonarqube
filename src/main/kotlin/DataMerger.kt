@@ -13,11 +13,10 @@ import java.time.OffsetDateTime
 import java.time.temporal.ChronoUnit
 
 
-/*
-Merges the list of issues with the measure history,
-grouping issues together by date and rule key
+/**
+ * Merges measures, issues, commits and faults together for every sonarqube analysis
  */
-fun mergeMeasuresWithIssues(measuresFile: String, issuesFile: String, combinedFile: String) {
+fun mergeAllToAnalysis(measuresFile: String, issuesFile: String, faultFile: String, commitFile: String, combinedFile: String) {
     println("Merging measures and issues")
     val ruleKeys = mutableSetOf<String>()
     val issuesByDateOpened = mutableMapOf<String, MutableList<String>>()
@@ -42,11 +41,32 @@ fun mergeMeasuresWithIssues(measuresFile: String, issuesFile: String, combinedFi
     val reader = CSVReader(FileReader(File(measuresFile)))
     val measures = reader.readAll()
 
-    val header = measures[0].toList() + ruleKeys.toList()
+    val commitBeans = CsvToBeanBuilder<GitCommits>(FileReader(File(commitFile)))
+            .withType(GitCommits::class.java).build().parse()
+            .map { it as GitCommits }
+
+    val faultBeans = CsvToBeanBuilder<JiraFaults>(FileReader(File(faultFile)))
+            .withType(JiraFaults::class.java).build().parse()
+            .map { it as JiraFaults }
+
+    //val commitToFaultMap: MutableMap<JiraFaults, List<GitCommits>> = mutableMapOf()
+    val faultToCommitMap: MutableMap<GitCommits, MutableList<JiraFaults>> = mutableMapOf()
+    for (fault in faultBeans) {
+        for (commit in getRelatedCommits(fault, commitBeans)) {
+            faultToCommitMap.get(commit)?.add(fault)
+            faultToCommitMap.putIfAbsent(commit, mutableListOf(fault))
+        }
+        //commitToFaultMap.put(fault, getRelatedCommits(fault, commitBeans))
+    }
+
+    val gitCols = listOf<String>("git-hash", "git-message", "git-committer", "git-total-committers", "git-changed-files")
+    val faultCols = listOf<String>("faults", "fault-keys", "fault-creation-dates", "fault-resolution-dates", "fault-priorities")
+
+    val header = measures[0].toList() + ruleKeys.toList() + gitCols + faultCols
     val rows = mutableListOf<List<String>>()
     rows.add(header)
-
     for (measure in measures.subList(1, measures.size)) {
+        // add measures
         val measureDate = measure[0]
         val openedIssues = issuesByDateOpened.getOrDefault(measureDate, mutableListOf())
         for (ruleKey in openedIssues) {
@@ -56,7 +76,30 @@ fun mergeMeasuresWithIssues(measuresFile: String, issuesFile: String, combinedFi
         for (ruleKey in closedIssues) {
             currentIssueCount[ruleKey] = currentIssueCount[ruleKey]!! - 1
         }
-        rows.add(measure.toList() + currentIssueCount.values.toList().map { it.toString() })
+
+
+        // add git commits
+        val relatedCommit = commitBeans.find { it.sonarDate == measureDate }!!
+        val commitValues = listOf<String>(relatedCommit.hash.orEmpty(), relatedCommit.message.orEmpty(), relatedCommit.committer.orEmpty(),
+                relatedCommit.totalCommitters.toString(), relatedCommit.changedFiles.orEmpty())
+
+
+        // add jira faults
+        val jiraIssues = faultToCommitMap.get(relatedCommit)
+        val jiraValues =
+                if (jiraIssues == null)
+                    listOf("0", "", "", "", "")
+                else
+                    listOf(jiraIssues.count().toString(),
+                            jiraIssues.map { it.jiraKey.orEmpty() }.joinToString(";"),
+                            jiraIssues.map { it.creationDate.orEmpty() }.joinToString(";"),
+                            jiraIssues.map { it.resolutionDate.orEmpty() }.joinToString(";"),
+                            jiraIssues.map { it.priority.orEmpty() }.joinToString(";"))
+
+        rows.add(measure.toList() + // sonarqube measures
+                        currentIssueCount.values.toList().map { it.toString() } + // sonarqube issues
+                commitValues + // git commit
+        jiraValues)
     }
 
     // save data to file
@@ -445,7 +488,7 @@ private fun mergeIssuesWithMAS(outputFile: String, issueFile: String, masFile: F
 fun mergeExtractedCsvFiles(projectKeys: List<String>, csvFilename: String) {
     println("Merging $csvFilename")
     // extract all column names occurring in files
-    val columnNames = mutableSetOf<String>()
+    val columnNames = mutableSetOf<String>("project")
     for (projectKey in projectKeys) {
         val reader = CSVReader(FileReader(getProjectFolder(projectKey) + csvFilename))
         val header = reader.readNext()
@@ -464,6 +507,7 @@ fun mergeExtractedCsvFiles(projectKeys: List<String>, csvFilename: String) {
         val csvRows: List<Array<String>> = reader.readAll()
         for (csvRow in csvRows) {
             val row = Array<String>(columnNames.size, { _ -> "0"})
+            row[0] = projectKey
             for ((index, value) in csvRow.withIndex())
                 row[mappedPositions[index]!!] = value
             result.add(row)
@@ -522,7 +566,7 @@ fun makeEmptyFolder(directoryStr: String) {
 /**
  * Returns the requested architecture smell file for a project
  */
-private fun findArchitectureSmellFile(projectKey: String, fileName: String): File {
+public fun findArchitectureSmellFile(projectKey: String, fileName: String): File {
     val architectureRoot = File("architecture-smells-arcan/")
     val architectureFolder = architectureRoot.listFiles().find {
         it.toString().toLowerCase().startsWith(
@@ -729,7 +773,7 @@ private fun groupByFile(inputHeader: Array<String>, inputRows: MutableList<Array
     }
 }
 
-private class Aggregations(
+class Aggregations(
         val sum: Map<String, Int>,
         val avg: Map<String, Double>,
         val min: Map<String, Int>,
