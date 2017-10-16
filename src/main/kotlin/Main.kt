@@ -29,8 +29,9 @@ fun main(args: Array<String>) {
 
 
     // Qualitas Corpus
-    /*
+
     val projectKeys = getProjectsContainingString("QC -")//QC - aspectj, QC - jboss, QC - jtopen
+    /*
     println("# of code smell types in projects")
     for (project in projectKeys) {
         val folderStr = getProjectFolder(project)
@@ -82,7 +83,7 @@ fun main(args: Array<String>) {
     println("DONE")
     return
 */
-    /*
+
     // extract issues from sonarInstance, takes long
     //for (projectKey in projectKeys)
     //    saveIssues("current-issues.csv", projectKey, "OPEN", ruleKeys)
@@ -105,7 +106,7 @@ fun main(args: Array<String>) {
 
     println("Execution completed in ${(System.currentTimeMillis()-startTime)/1000.0} seconds (${(System.currentTimeMillis() - startTime)/60000} minutes)")
     return
-*/
+
 
 
     val projectList = mutableListOf<HistoryProject>()

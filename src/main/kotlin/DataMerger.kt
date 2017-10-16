@@ -374,21 +374,33 @@ private fun ruleTaxonomyGroup(ruleKey: String): String {
         "code_smells:long_method",
         "code_smells:complex_class",
         "code_smells:long_parameter_list",
-        "code_smells:many_field_attributes_not_complex",
         "code_smells:blob_class",
-        "code_smells:large_class" ->
+        "code_smells:large_class",
+        "code_smells:swiss_army_knife"->
             return "The Bloaters"
 
-        "code_smells:antisingleton" ->
-            return "The Object-Orientation Abusers"
-
         "code_smells:lazy_class",
-        "common-java:DuplicatedBlocks" ->
+        "common-java:DuplicatedBlocks",
+        "code_smells:speculative_generality",
+        "code_smells:many_field_attributes_not_complex" ->
             return "The Dispensables"
 
-        "code_smells:class_data_private",
         "code_smells:message_chains" ->
             return "The Encapsulators"
+
+        "code_smells:antisingleton",
+        "code_smells:baseclass_knows_derived",
+        "code_smells:baseclass_abstract",
+        "code_smells:class_data_private",
+        "code_smells:refused_parent_bequest",
+        "code_smells:tradition_breaker" ->
+            return "The Object-Orientation Abusers"
+
+        "code_smells:functional_decomposition" ->
+            return "The Object-Orientation Avoiders"
+
+        "code_smells:spaghetti_code" ->
+            return "The Change Preventers"
 
         else ->
             return ruleKey
