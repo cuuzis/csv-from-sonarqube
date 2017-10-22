@@ -48,8 +48,8 @@ fun main(args: Array<String>) {
     }
 */
 
-    //groupSmellsByProjects(projectKeys, "grouped-by-projects.csv")
-
+    groupSmellsByProjects(projectKeys, "grouped-by-projects.csv")
+return
     /*
     for (sonarKey in projectKeys) {
         val folderStr = getProjectFolder(sonarKey)
@@ -84,6 +84,7 @@ fun main(args: Array<String>) {
     return
 */
 
+/*
     // extract issues from sonarInstance, takes long
     //for (projectKey in projectKeys)
     //    saveIssues("current-issues.csv", projectKey, "OPEN", ruleKeys)
@@ -106,7 +107,7 @@ fun main(args: Array<String>) {
 
     println("Execution completed in ${(System.currentTimeMillis()-startTime)/1000.0} seconds (${(System.currentTimeMillis() - startTime)/60000} minutes)")
     return
-
+*/
 
 
     val projectList = mutableListOf<HistoryProject>()
@@ -450,9 +451,9 @@ fun groupSmellsByProjects(projectKeys: List<String>, filename: String) {
     //mergeExtractedCsvFiles(projectKeys, "cycles-issues-by-cycle.csv")
     //mergeExtractedCsvFiles(projectKeys, "mas-issues-by-package.csv")
 
-    //add project name to csv2
     /*
-    val fileWithProjects = File("extraction/cycles-issues-by-class-taxonomy.csv").readLines()
+    //add project name to csv2
+    val fileWithProjects = File("extraction/cycles-issues-by-class-new-taxonomy.csv").readLines()
     val fileWithoutProjects = File("extraction/cycles-issues-by-class-no-taxonomy.csv")
     File("extraction/cycles-issues-by-class-no-taxonomy-2.csv").bufferedWriter().use{ resultFile ->
         fileWithoutProjects.readLines().forEachIndexed { index, line ->
@@ -462,6 +463,8 @@ fun groupSmellsByProjects(projectKeys: List<String>, filename: String) {
         }
     }*/
 
+    /*
+    //arch smells
     println("project,udNum,hlNum,cdNum,{udNum+hlNum+cdNum},packages,udPackages,hlPackages,cdPackages")
     for (project in projectKeys) {
         val archMasFile = findArchitectureSmellFile(project, "mas.csv")
@@ -489,15 +492,17 @@ fun groupSmellsByProjects(projectKeys: List<String>, filename: String) {
         println("$project,$udNum,$hlNum,$cdNum,${udNum+hlNum+cdNum},$packages,$udPackages,$hlPackages,$cdPackages")
     }
     return
+    */
 
 
-    //group by project
+    //group code-smells (sonarqube issues/violations) by project
     val issueAggregations = mutableMapOf<Int, Aggregations>()
-    //val fileWithTaxonomy = File("extraction/cycles-issues-by-class-taxonomy.csv")
-    val fileWithoutTaxonmy = File("extraction/cycles-issues-by-class-no-taxonomy.csv")
-    File("extraction/cycles-issues-by-class-no-taxonomy-grouped.csv").bufferedWriter().use{ resultFile ->
+    val fileWithTaxonomy = File("extraction/cycles-issues-by-class-new-taxonomy.csv")
+    //val fileWithoutTaxonmy = File("extraction/cycles-issues-by-class-no-taxonomy.csv")
+    File("extraction/cycles-issues-by-class-new-taxonomy-grouped.csv").bufferedWriter().use{ resultFile ->
         //val input = fileWithTaxonomy.readLines()
-        val reader = CSVReader(FileReader(fileWithoutTaxonmy))
+        val reader = CSVReader(FileReader(fileWithTaxonomy))
+        //val reader = CSVReader(FileReader(fileWithoutTaxonmy))
         val input = reader.readAll()
         //val inputHeader = input[0].split(",")
         val inputHeader = input[0]
