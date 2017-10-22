@@ -1,5 +1,6 @@
 package gui
 
+import GetStringFromUrlTask
 import javafx.application.Application
 import javafx.scene.Scene
 import javafx.scene.layout.StackPane
@@ -9,14 +10,20 @@ import javafx.scene.layout.GridPane
 import javafx.concurrent.Task
 import javafx.scene.control.*
 import javafx.scene.control.ProgressBar
+import java.lang.Thread.UncaughtExceptionHandler
+import jdk.nashorn.internal.runtime.ECMAException.getException
+
+
+
+
+
+private var currentTask: Task<Void>? = null
+private val taskProgressBar = ProgressBar(0.0)
+private val taskStopButton = Button("Stop")
+private val taskStatusLabel = Label("")
 
 
 class SonarGui : Application() {
-
-    private var currentTask: Task<Void>? = null
-    private val taskProgressBar = ProgressBar(0.0)
-    private val taskStopButton = Button("Stop")
-    private val taskStatusLabel = Label("")
 
     companion object {
         @JvmStatic
@@ -37,6 +44,7 @@ class SonarGui : Application() {
         val textServer = TextField("http://sonar.inf.unibz.it")
         textServer.textProperty().addListener({ _, oldValue, newValue ->
             println("textfield changed from $oldValue to $newValue")
+            runTask(GetStringFromUrlTask(newValue))
             //getProjectList(newValue)
         })
 
@@ -48,7 +56,8 @@ class SonarGui : Application() {
         listProjects.selectionModel.selectionMode = SelectionMode.MULTIPLE
         listProjects.selectionModel.selectedItemProperty().addListener({ _, oldValue, newValue ->
             println("Selection changed from $oldValue to $newValue")
-            fakeTask()
+            //fakeTask()
+            //runTask()
             //getProjectList(newValue)
         })
 
@@ -73,47 +82,41 @@ class SonarGui : Application() {
 
     }
 
-    private fun fakeTask() {
+    private fun runTask(newTask: GuiTask) {
         currentTask?.cancel()
-        val newTask = object : Task<Void>() {
-            override fun call(): Void? {
-                taskStopButton.isDisable = false
-                updateMessage("Working...")
-                updateProgress(-1, 1)
-
-                Thread.sleep(3000)
-                val max = 100
-                for (i in 1..max) {
-                    Thread.sleep(50)
-                    updateProgress(i.toLong(), max.toLong())
-                    updateMessage("Iteration $i")
-                    println("Iteration $i")
-                }
-                return null
-            }
-
-            override fun done() {
-                println("done")
-                taskStopButton.isDisable = true
-                if (progress < 0) {
-                    updateProgress(0, 1)
-                }
-                currentTask = null
-            }
-
-            override fun cancelled() {
-                updateMessage("Cancelled")
-            }
-
-            override fun succeeded() {
-                updateMessage("Succeeded")
-            }
-
-        }
-
         taskProgressBar.progressProperty().bind(newTask.progressProperty())
         taskStatusLabel.textProperty().bind(newTask.messageProperty())
         currentTask = newTask
         Thread(currentTask).start()
+    }
+}
+
+abstract class GuiTask : Task<Void>() {
+
+    override fun call(): Void? {
+        taskStopButton.isDisable = false
+        updateProgress(-1, 1)
+        return null
+    }
+
+    override fun done() {
+        println("Task done")
+        taskStopButton.isDisable = true
+        updateProgress(0,1)
+        currentTask = null
+    }
+
+    override fun cancelled() {
+        updateMessage("Task cancelled")
+    }
+
+    override fun succeeded() {
+        updateMessage("Task succeeded")
+    }
+
+    override fun failed() {
+        updateMessage("Task failed: ${exception}")
+        System.err.println("The task failed with the following exception:")
+        exception.printStackTrace(System.err)
     }
 }

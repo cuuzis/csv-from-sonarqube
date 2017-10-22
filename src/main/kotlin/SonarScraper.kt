@@ -1,6 +1,7 @@
 import com.opencsv.CSVWriter
 import com.opencsv.bean.CsvToBeanBuilder
 import csv_model.extracted.SonarIssues
+import gui.GuiTask
 import org.json.simple.JSONArray
 import org.json.simple.JSONObject
 import org.json.simple.parser.JSONParser
@@ -16,6 +17,7 @@ import java.util.*
 import java.io.FileReader
 import java.io.FileWriter
 import java.io.File
+import java.net.UnknownHostException
 
 
 private val parser = JSONParser()
@@ -480,4 +482,20 @@ fun getStringFromUrl(queryURL: String): String {
         }
     } while (inputLine != null)
     return stringBuilder.toString()
+}
+
+
+class GetStringFromUrlTask(private val queryURL: String) : GuiTask() {
+
+    override fun call(): Void? {
+        super.call()
+        println("Getting string from url")
+        updateMessage("Getting string from url")
+        try {
+            getStringFromUrl(queryURL)
+        } catch (e: UnknownHostException) {
+            updateMessage("Host $queryURL not found")
+        }
+        return null
+    }
 }
