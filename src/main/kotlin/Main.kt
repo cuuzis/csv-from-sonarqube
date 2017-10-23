@@ -8,7 +8,7 @@ import java.io.FileWriter
 import java.math.BigDecimal
 
 //val sonarInstance = "http://localhost:9000"
-val sonarInstance = "http://sonar.inf.unibz.it"
+//val sonarInstance = "http://sonar.inf.unibz.it"
 val workDir = "extraction" + File.separatorChar
 
 

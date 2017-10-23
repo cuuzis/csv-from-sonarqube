@@ -19,7 +19,7 @@ import java.io.FileWriter
 import java.io.File
 import java.net.UnknownHostException
 
-
+private val sonarInstance = "http://sonar.inf.unibz.it"
 private val parser = JSONParser()
 private val MAX_URL_LENGTH = 2000
 private val MAX_ELASTICSEARCH_RESULTS = 10000
@@ -482,20 +482,4 @@ fun getStringFromUrl(queryURL: String): String {
         }
     } while (inputLine != null)
     return stringBuilder.toString()
-}
-
-
-class GetStringFromUrlTask(private val queryURL: String) : GuiTask() {
-
-    override fun call(): Void? {
-        super.call()
-        println("Getting string from url")
-        updateMessage("Getting string from url")
-        try {
-            getStringFromUrl(queryURL)
-        } catch (e: UnknownHostException) {
-            updateMessage("Host $queryURL not found")
-        }
-        return null
-    }
 }
