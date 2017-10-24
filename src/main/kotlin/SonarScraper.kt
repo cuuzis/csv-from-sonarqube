@@ -43,10 +43,10 @@ fun  getInstantFromSonarDate(sonarDate: String): Instant {
 }
 
 /**
- * Returns a list of project keys containing a string
+ * Returns a list of projects (key, name) containing a string
  */
-fun  getProjectsContainingString(sonarInstance: String, partOfName: String): List<String> {
-    println("Requesting keys for projects containing '$partOfName'")
+fun  getProjectsContainingString(sonarInstance: String, partOfName: String): List<Pair<String, String>> {
+    println("Requesting projects containing '$partOfName'")
     val query = "$sonarInstance/api/components/search" +
             "?qualifiers=TRK" +
             "&ps=1000" +
@@ -54,7 +54,7 @@ fun  getProjectsContainingString(sonarInstance: String, partOfName: String): Lis
     val response = getStringFromUrl(query)
     val mainObject = parser.parse(response) as JSONObject
     val componentArray = mainObject["components"] as JSONArray
-    return componentArray.filterIsInstance<JSONObject>().map { it["key"].toString() }
+    return componentArray.filterIsInstance<JSONObject>().map { Pair(it["key"].toString(), it["name"].toString()) }
 }
 
 /**

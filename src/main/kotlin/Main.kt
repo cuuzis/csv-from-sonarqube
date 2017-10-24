@@ -31,6 +31,7 @@ fun main(args: Array<String>) {
     // Qualitas Corpus
 
     val projectKeys = getProjectsContainingString(sonarInstanceToRemove, "QC -")//QC - aspectj, QC - jboss, QC - jtopen
+            .map { it.first }
     /*
     println("# of code smell types in projects")
     for (project in projectKeys) {
