@@ -1,19 +1,19 @@
 package gui
 
-import getProjectsContainingString
-import getStringFromUrl
+import sonarqube.getProjectsContainingString
+import sonarqube.getStringFromUrl
 import javafx.geometry.Insets
 import javafx.geometry.Pos
 import javafx.scene.control.*
 import javafx.scene.layout.HBox
 import javafx.scene.layout.VBox
 import java.net.UnknownHostException
-import javafx.beans.property.SimpleStringProperty
 import javafx.scene.control.cell.PropertyValueFactory
 import javafx.scene.layout.Priority
+import sonarqube.SonarProject
 
 
-private val tableProjects = TableView<Project>()
+private val tableProjects = TableView<SonarProject>()
 
 /**
  * GUI Sonarqube issue/measure extraction
@@ -46,10 +46,10 @@ class SonarqubeTab(private val mainGui: MainGui) : Tab("Sonarqube") {
 
     private fun addProjectsRow(rows: VBox) {
         val labelProjects = Label("Projects on server:")
-        val keyCol: TableColumn<Project, Project> = TableColumn("key")
-        keyCol.cellValueFactory = PropertyValueFactory<Project, Project>("key")
-        val nameCol: TableColumn<Project, Project> = TableColumn("name")
-        nameCol.cellValueFactory = PropertyValueFactory<Project, Project>("name")
+        val keyCol: TableColumn<SonarProject, SonarProject> = TableColumn("key")
+        keyCol.cellValueFactory = PropertyValueFactory<SonarProject, SonarProject>("key")
+        val nameCol: TableColumn<SonarProject, SonarProject> = TableColumn("name")
+        nameCol.cellValueFactory = PropertyValueFactory<SonarProject, SonarProject>("name")
 
         tableProjects.columns.addAll(keyCol, nameCol)
         tableProjects.columnResizePolicy = TableView.CONSTRAINED_RESIZE_POLICY
@@ -68,7 +68,7 @@ class SonarqubeTab(private val mainGui: MainGui) : Tab("Sonarqube") {
  */
 class GetProjectListTask(private val sonarInstance: String) : GuiTask() {
 
-    override fun call(): List<Pair<String, String>> {
+    override fun call(): List<SonarProject> {
         super.call()
         updateMessage("Getting Sonarqube project list")
         try {
@@ -81,7 +81,7 @@ class GetProjectListTask(private val sonarInstance: String) : GuiTask() {
                 updateMessage("Host $sonarInstance not found")
             }
         }
-        return listOf<Pair<String, String>>()
+        return listOf<SonarProject>()
     }
 
     /**
@@ -89,28 +89,8 @@ class GetProjectListTask(private val sonarInstance: String) : GuiTask() {
      */
     override fun succeeded() {
         @Suppress("UNCHECKED_CAST")
-        val projectsOnServer: List<Pair<String, String>> = value as List<Pair<String, String>>
+        val projectsOnServer: List<SonarProject> = value as List<SonarProject>
         tableProjects.items.clear()
-        tableProjects.items.addAll(projectsOnServer.map { Project(it.first, it.second) })
-    }
-}
-
-class Project constructor(key: String, name: String) {
-
-    private val key: SimpleStringProperty = SimpleStringProperty(key)
-    private val name: SimpleStringProperty = SimpleStringProperty(name)
-
-    /**
-     * Getter for TableColumn "key"
-     */
-    fun getKey(): String {
-        return key.get()
-    }
-
-    /**
-     * Getter for TableColumn "name"
-     */
-    fun getName(): String {
-        return name.get()
+        tableProjects.items.addAll(projectsOnServer)
     }
 }

@@ -1,7 +1,9 @@
 import com.opencsv.CSVReader
 import com.opencsv.CSVWriter
-import com.opencsv.bean.CsvToBeanBuilder
-import csv_model.architecture_smells.ArchMultiA
+import sonarqube.getProjectsContainingString
+import sonarqube.getRuleKeys
+import sonarqube.saveIssues
+import sonarqube.saveMeasureHistory
 import java.io.File
 import java.io.FileReader
 import java.io.FileWriter
@@ -31,7 +33,7 @@ fun main(args: Array<String>) {
     // Qualitas Corpus
 
     val projectKeys = getProjectsContainingString(sonarInstanceToRemove, "QC -")//QC - aspectj, QC - jboss, QC - jtopen
-            .map { it.first }
+            .map { it.getKey() }
     /*
     println("# of code smell types in projects")
     for (project in projectKeys) {
@@ -55,7 +57,7 @@ return
     for (sonarKey in projectKeys) {
         val folderStr = getProjectFolder(sonarKey)
         val measuresFile = folderStr + "current-measures.csv"
-        saveCurrentMeasures(measuresFile, sonarKey)
+        sonarqube.saveCurrentMeasures(measuresFile, sonarKey)
     }
     // because of new_security_rating etc. headers are different
     mergeExtractedCsvFiles(projectKeys, "current-measures.csv")
@@ -88,7 +90,7 @@ return
 /*
     // extract issues from sonarInstance, takes long
     //for (projectKey in projectKeys)
-    //    saveIssues("current-issues.csv", projectKey, "OPEN", ruleKeys)
+    //    sonarqube.saveIssues("current-issues.csv", projectKey, "OPEN", ruleKeys)
 
     // map sonar issues to arch cycle smells (~2h30min)
     //mapIssuesToCyclicDependencies(projectKeys, false)
@@ -195,7 +197,7 @@ return
         val folderStr = getProjectFolder(project.sonarKey)
         //val issuesFile = folderStr + "sonar-issues.csv"
         //val measuresFile = folderStr + "current-measures.csv"
-        //saveCurrentMeasures(measuresFile, project.sonarKey)
+        //sonarqube.saveCurrentMeasures(measuresFile, project.sonarKey)
     }
     //mergeExtractedSameCsvFiles(projectList.map { it.sonarKey }, "sonar-issues.csv")
 

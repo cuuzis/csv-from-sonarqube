@@ -2,6 +2,7 @@ import com.opencsv.CSVWriter
 import org.json.simple.JSONArray
 import org.json.simple.JSONObject
 import org.json.simple.parser.JSONParser
+import sonarqube.getStringFromUrl
 import java.io.FileWriter
 import java.net.URLEncoder
 
