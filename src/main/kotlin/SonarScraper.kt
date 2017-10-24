@@ -1,7 +1,6 @@
 import com.opencsv.CSVWriter
 import com.opencsv.bean.CsvToBeanBuilder
 import csv_model.extracted.SonarIssues
-import gui.GuiTask
 import org.json.simple.JSONArray
 import org.json.simple.JSONObject
 import org.json.simple.parser.JSONParser
@@ -17,9 +16,8 @@ import java.util.*
 import java.io.FileReader
 import java.io.FileWriter
 import java.io.File
-import java.net.UnknownHostException
 
-private val sonarInstance = "http://sonar.inf.unibz.it"
+private val sonarInstanceToRemove = "http://sonar.inf.unibz.it"
 private val parser = JSONParser()
 private val MAX_URL_LENGTH = 2000
 private val MAX_ELASTICSEARCH_RESULTS = 10000
@@ -47,7 +45,7 @@ fun  getInstantFromSonarDate(sonarDate: String): Instant {
 /**
  * Returns a list of project keys containing a string
  */
-fun  getProjectsContainingString(partOfName: String): List<String> {
+fun  getProjectsContainingString(sonarInstance: String, partOfName: String): List<String> {
     println("Requesting keys for projects containing '$partOfName'")
     val query = "$sonarInstance/api/components/search" +
             "?qualifiers=TRK" +
@@ -65,7 +63,7 @@ fun  getProjectsContainingString(partOfName: String): List<String> {
 fun saveCurrentMeasures(fileName: String, projectKey: String) {
     val measureMap = mutableMapOf<String,String>()
     measureMap.put("_project",projectKey)
-    val measureQuery = "$sonarInstance/api/measures/component" +
+    val measureQuery = "$sonarInstanceToRemove/api/measures/component" +
             "?componentKey=$projectKey" +
             "&metricKeys="
     val metricKeysLeft = getMetricKeys().toMutableList()
@@ -115,7 +113,7 @@ private fun saveCurrentMeasuresAndIssues(projectKeys: List<String>, metricKeys: 
         val metricKeysLeft = metricKeys.toMutableList()
         measureKeys.add("_project")
         measureValues.put("_project", projectKey)
-        val measureQuery = "$sonarInstance/api/measures/component" +
+        val measureQuery = "$sonarInstanceToRemove/api/measures/component" +
                 "?componentKey=$projectKey" +
                 "&metricKeys="
         while (!metricKeysLeft.isEmpty()) {
@@ -191,7 +189,7 @@ fun saveMeasureHistory(fileName: String, projectKey: String) {
     var currentPage = 0
     do {
         currentPage++
-        val measureQuery = "$sonarInstance/api/measures/search_history" +
+        val measureQuery = "$sonarInstanceToRemove/api/measures/search_history" +
                 "?component=" + projectKey +
                 "&ps=$pageSize" +
                 "&p=$currentPage" +
@@ -233,7 +231,7 @@ fun saveMeasureHistory(fileName: String, projectKey: String) {
  */
 private fun getNonemptyMetricKeys(projectKey: String): List<String> {
     val usefulMeasures = mutableListOf<String>()
-    val measureQuery = "$sonarInstance/api/measures/search_history" +
+    val measureQuery = "$sonarInstanceToRemove/api/measures/search_history" +
             "?component=$projectKey" +
             "&metrics="
     val metricKeysLeft = getMetricKeys().toMutableList()
@@ -264,7 +262,7 @@ private fun getNonemptyMetricKeys(projectKey: String): List<String> {
  * Returns all measures available on the server
  */
 private fun getMetricKeys(): List<String> {
-    val metricsQuery = "$sonarInstance/api/metrics/search?ps=1000"
+    val metricsQuery = "$sonarInstanceToRemove/api/metrics/search?ps=1000"
     val metricsResult = getStringFromUrl(metricsQuery)
     val metricsObject = parser.parse(metricsResult) as JSONObject
     val metricsCount = Integer.parseInt(metricsObject["total"].toString())
@@ -329,7 +327,7 @@ private fun saveIssuesForKeys(ruleKeys: List<String>, componentKey: String, stat
  * Returned object contains total issue count and the earliest issues.
  */
 private fun issuesAt(dateFilter: String, componentKey: String, statuses: String, ruleKeys: List<String>): JSONObject {
-    val issuesQuery = "$sonarInstance/api/issues/search" +
+    val issuesQuery = "$sonarInstanceToRemove/api/issues/search" +
             "?componentKeys=$componentKey" +
             "&s=CREATION_DATE" +
             "&statuses=$statuses" +
@@ -349,7 +347,7 @@ private fun saveIssuesAt(dateFilter: String, componentKey: String, statuses: Str
     var page = 0
     do {
         page++
-        val issuesQuery = "$sonarInstance/api/issues/search" +
+        val issuesQuery = "$sonarInstanceToRemove/api/issues/search" +
                 "?componentKeys=$componentKey" +
                 "&s=CREATION_DATE" +
                 "&statuses=$statuses" +
@@ -444,7 +442,7 @@ fun getRuleKeys(): List<String> {
     var page = 0
     do {
         page++
-        val query = "$sonarInstance/api/rules/search" +
+        val query = "$sonarInstanceToRemove/api/rules/search" +
                 "?ps=$pageSize" +
                 "&p=$page" +
                 "&f=lang" +

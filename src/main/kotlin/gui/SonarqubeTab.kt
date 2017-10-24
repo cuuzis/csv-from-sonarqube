@@ -3,9 +3,13 @@ package gui
 import getProjectsContainingString
 import getStringFromUrl
 import javafx.geometry.Insets
+import javafx.geometry.Pos
 import javafx.scene.control.*
-import javafx.scene.layout.GridPane
+import javafx.scene.layout.HBox
+import javafx.scene.layout.VBox
 import java.net.UnknownHostException
+
+
 
 
 private val listProjects = ListView<String>()
@@ -21,25 +25,31 @@ class SonarqubeTab(private val mainGui: MainGui) : Tab("Sonarqube") {
     private val labelProjects = Label("Projects on server:")
 
     init {
+        val rows = VBox()
+        addServerRow(rows)
+        addProjectsRow(rows)
+        this.content = rows
+        this.isClosable = false
+    }
+
+    private fun addServerRow(rows: VBox) {
         textServer.textProperty().addListener({ _, _, newServerString ->
             mainGui.runGuiTask(GetProjectListTask(newServerString))
         })
         textServer.textProperty().set("http://sonar.inf.unibz.it")
-        listProjects.setPrefSize(150.0, 120.0)
-        listProjects.selectionModel.selectionMode = SelectionMode.MULTIPLE
-        listProjects.selectionModel.selectedItemProperty().addListener({ _, oldValue, newValue ->
-            println("Selection changed from $oldValue to $newValue")
-        })
-        val grid = GridPane()
-        grid.hgap = 10.0
-        grid.vgap = 10.0
-        grid.padding = Insets(0.0, 10.0, 0.0, 10.0)
-        grid.add(labelServer, 0, 1)
-        grid.add(textServer, 1, 1)
-        grid.add(labelProjects, 0, 2)
-        grid.add(listProjects, 1, 2)
-        this.content = grid
-        this.isClosable = false
+        val serverRow = HBox(labelServer, textServer)
+        serverRow.spacing = 10.0
+        serverRow.padding = Insets(10.0, 10.0, 10.0, 10.0)
+        serverRow.alignment = Pos.CENTER_LEFT
+        rows.children.add(serverRow)
+    }
+
+    private fun addProjectsRow(rows: VBox) {
+        val projectsRow = HBox(labelProjects, listProjects)
+        projectsRow.spacing = 10.0
+        projectsRow.padding = Insets(10.0, 10.0, 10.0, 10.0)
+        projectsRow.alignment = Pos.CENTER_LEFT
+        rows.children.add(projectsRow)
     }
 }
 
@@ -53,11 +63,13 @@ class GetProjectListTask(private val sonarInstance: String) : GuiTask() {
         updateMessage("Getting Sonarqube project list")
         try {
             getStringFromUrl(sonarInstance)
-            val result = getProjectsContainingString("")
+            val result = getProjectsContainingString(sonarInstance, "")
             updateMessage("Retrieved ${result.size} projects from $sonarInstance")
             return result
         } catch (e: UnknownHostException) {
-            updateMessage("Host $sonarInstance not found")
+            if (!isCancelled) {
+                updateMessage("Host $sonarInstance not found")
+            }
         }
         return listOf<String>()
     }
@@ -68,6 +80,7 @@ class GetProjectListTask(private val sonarInstance: String) : GuiTask() {
     override fun succeeded() {
         @Suppress("UNCHECKED_CAST")
         val projectsOnServer: List<String> = value as List<String>
+        listProjects.items.clear()
         listProjects.items.addAll(projectsOnServer)
     }
 }

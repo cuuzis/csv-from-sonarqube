@@ -10,7 +10,7 @@ import java.math.BigDecimal
 //val sonarInstance = "http://localhost:9000"
 //val sonarInstance = "http://sonar.inf.unibz.it"
 val workDir = "extraction" + File.separatorChar
-
+private val sonarInstanceToRemove = "http://sonar.inf.unibz.it"
 
 fun main(args: Array<String>) {
     val startTime = System.currentTimeMillis()
@@ -30,7 +30,7 @@ fun main(args: Array<String>) {
 
     // Qualitas Corpus
 
-    val projectKeys = getProjectsContainingString("QC -")//QC - aspectj, QC - jboss, QC - jtopen
+    val projectKeys = getProjectsContainingString(sonarInstanceToRemove, "QC -")//QC - aspectj, QC - jboss, QC - jtopen
     /*
     println("# of code smell types in projects")
     for (project in projectKeys) {

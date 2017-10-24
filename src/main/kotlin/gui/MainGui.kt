@@ -4,10 +4,12 @@ import javafx.application.Application
 import javafx.scene.Scene
 import javafx.stage.Stage
 import javafx.geometry.Insets
-import javafx.scene.layout.GridPane
 import javafx.concurrent.Task
+import javafx.geometry.Pos
 import javafx.scene.control.*
 import javafx.scene.control.ProgressBar
+import javafx.scene.layout.*
+import javafx.scene.paint.Color
 
 
 private var currentTask: Task<Any>? = null
@@ -28,31 +30,43 @@ class MainGui : Application() {
     }
 
     override fun start(primaryStage: Stage) {
-        primaryStage.title = "Sonarqube issue extractor"
-        taskStopButton.setOnAction {
-            println("Task topped")
-            currentTask?.cancel()
-        }
-        taskStopButton.isDisable = true
 
+        val rows = VBox()
+        addMainContent(rows)
+        addStatusBar(rows)
+
+        primaryStage.title = "Sonarqube issue extractor"
+        primaryStage.scene = Scene(rows, 600.0, 500.0)
+        primaryStage.show()
+    }
+
+    private fun addMainContent(rows: VBox) {
         val tabPane = TabPane(
                 SonarqubeTab(this),
                 Tab("Github"),
                 Tab("Jira"),
                 Tab("Log"))
-        val grid = GridPane()
-        grid.hgap = 10.0
-        grid.vgap = 10.0
-        grid.padding = Insets(0.0, 10.0, 0.0, 10.0)
-        grid.add(tabPane, 0, 0, 3, 5)
-        grid.add(taskStopButton, 0, 6)
-        grid.add(taskProgressBar, 1, 6)
-        grid.add(taskStatusLabel, 0, 7, 3, 1)
+        rows.children.add(tabPane)
+        VBox.setVgrow(tabPane, Priority.ALWAYS)
+    }
 
-        //val root = StackPane()
-        //root.children.add(grid)
-        primaryStage.scene = Scene(grid, 600.0, 500.0)
-        primaryStage.show()
+    private fun addStatusBar(rows: VBox) {
+        taskStopButton.setOnAction {
+            println("Task stopped")
+            currentTask?.cancel()
+        }
+        taskStopButton.isDisable = true
+        val taskStatusRow = HBox(taskStopButton, taskProgressBar)
+        taskStatusRow.spacing = 10.0
+        taskStatusRow.padding = Insets(10.0, 10.0, 10.0, 10.0)
+        taskStatusRow.alignment = Pos.CENTER_LEFT
+        taskStatusRow.border = Border(BorderStroke(
+                Color.LIGHTGRAY,
+                BorderStrokeStyle.SOLID,
+                CornerRadii.EMPTY,
+                BorderWidths(1.0,0.0,0.0,0.0)))
+        rows.children.add(taskStatusRow)
+        rows.children.add(taskStatusLabel)
     }
 
     /**
@@ -91,7 +105,7 @@ abstract class GuiTask() : Task<Any>() {
     }
 
     override fun cancelled() {
-        println("${this.javaClass.simpleName} cancelled")
+        updateMessage("${this.javaClass.simpleName} cancelled")
     }
 
     override fun succeeded() {
