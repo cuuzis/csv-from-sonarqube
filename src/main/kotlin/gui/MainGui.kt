@@ -3,9 +3,7 @@ package gui
 import javafx.application.Application
 import javafx.scene.Scene
 import javafx.stage.Stage
-import javafx.geometry.Insets
 import javafx.concurrent.Task
-import javafx.geometry.Pos
 import javafx.scene.control.*
 import javafx.scene.control.ProgressBar
 import javafx.scene.layout.*
@@ -56,10 +54,7 @@ class MainGui : Application() {
             currentTask?.cancel()
         }
         taskStopButton.isDisable = true
-        val taskStatusRow = HBox(taskStopButton, taskProgressBar)
-        taskStatusRow.spacing = 10.0
-        taskStatusRow.padding = Insets(10.0, 10.0, 10.0, 10.0)
-        taskStatusRow.alignment = Pos.CENTER_LEFT
+        val taskStatusRow = HBoxRow(taskStopButton, taskProgressBar)
         taskStatusRow.border = Border(BorderStroke(
                 Color.LIGHTGRAY,
                 BorderStrokeStyle.SOLID,
