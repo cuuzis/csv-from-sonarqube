@@ -19,7 +19,7 @@ import java.io.FileReader
 import java.io.FileWriter
 import java.io.File
 
-private val sonarInstanceToRemove = "http://sonar.inf.unibz.it"
+var sonarInstanceToRemove = "http://sonar.inf.unibz.it"
 private val parser = JSONParser()
 private val MAX_URL_LENGTH = 2000
 private val MAX_ELASTICSEARCH_RESULTS = 10000
@@ -47,14 +47,15 @@ fun  getInstantFromSonarDate(sonarDate: String): Instant {
 /**
  * Returns a list of projects (key, name) containing a string
  */
-fun  getProjectsContainingString(sonarInstance: String, partOfName: String): List<SonarProject> {
+// TODO: refactor return type, name
+fun  getProjectsContainingString(sonarServer: SonarServer, partOfName: String): List<SonarProject> {
     println("Requesting projects containing '$partOfName'")
     val projectList = mutableListOf<SonarProject>()
     val pageSize = 500
     var currentPage = 0
     do {
         currentPage++
-        val query = "$sonarInstance/api/components/search" +
+        val query = "${sonarServer.serverAddress}/api/components/search" +
                 "?qualifiers=TRK" +
                 "&ps=$pageSize" +
                 "&p=$currentPage" +
@@ -65,7 +66,7 @@ fun  getProjectsContainingString(sonarInstance: String, partOfName: String): Lis
         val pagingObject = mainObject["paging"] as JSONObject
         val componentArray = mainObject["components"] as JSONArray
         val projectsOnPage = componentArray.filterIsInstance<JSONObject>().map {
-            SonarProject(it["key"].toString(), it["name"].toString())
+            SonarProject(sonarServer, it["key"].toString(), it["name"].toString())
         }
         projectList.addAll(projectsOnPage)
     } while (pageSize * currentPage < pagingObject["total"].toString().toInt())
@@ -154,7 +155,7 @@ private fun saveCurrentMeasuresAndIssues(projectKeys: List<String>, metricKeys: 
 
         //save issues to file
         val issuesFolderName = projectKey.replace("\\W".toRegex(),"-")
-        saveIssues("$issuesFolderName/current-issues.csv", projectKey, "OPEN", ruleKeys)
+        saveIssuesOld("$issuesFolderName/current-issues.csv", projectKey, "OPEN", ruleKeys)
 
         //read issues from file and count them
         val issueCount = mutableMapOf<String, Int>()
@@ -293,7 +294,7 @@ private fun getMetricKeys(): List<String> {
 /**
  * Saves issue history for a project in a .csv file.
  */
-fun saveIssues(fileName: String, componentKey: String, statuses: String, ruleKeys: List<String>) {
+fun saveIssuesOld(fileName: String, componentKey: String, statuses: String, ruleKeys: List<String>) {
     println("Extracting issues for " + componentKey)
     val startTime = System.currentTimeMillis()
 
@@ -307,6 +308,29 @@ fun saveIssues(fileName: String, componentKey: String, statuses: String, ruleKey
         csvWriter.writeAll(rows.sortedBy { it[0] }) // sorted by "creation-date"
     }
     println("Sonarqube issues saved to $fileName, extraction took ${(System.currentTimeMillis()-startTime)/1000.0} seconds")
+}
+
+
+/**
+ * Saves Sonarqube project's issue history in a .csv file. Returns the name of the file.
+ */
+fun saveIssues(project: SonarProject, statuses: String): String {
+    println("Extracting issues for ${project.getName()}")
+    val startTime = System.currentTimeMillis()
+
+    val header = arrayOf("creation-date", "update-date", "rule", "component", "effort")
+    val rows = mutableListOf<Array<String>>()
+    saveIssuesForKeys(project.sonarServer.getRuleKeys(), project.getKey(), statuses, rows)
+
+    //val fileName = project.getKeyAsFolderName() + File.separatorChar + "current-issues.csv"
+    val fileName = project.getKeyAsFolderName() + "_" + "current-issues.csv"
+    FileWriter(fileName).use { fw ->
+        val csvWriter = CSVWriter(fw)
+        csvWriter.writeNext(header)
+        csvWriter.writeAll(rows.sortedBy { it[0] }) // sorted by "creation-date"
+    }
+    println("Sonarqube issues saved to $fileName, extraction took ${(System.currentTimeMillis()-startTime)/1000.0} seconds")
+    return fileName
 }
 
 /**
@@ -450,14 +474,14 @@ private fun splitIntoBatches(list: List<String>, batchSize: Int): List<List<Stri
 /**
  * Get a list of rule keys for java language
  */
-fun getRuleKeys(): List<String> {
+fun getRuleKeys(sonarInstance: String): List<String> {
     println("Requesting rule keys for java")
     val result = mutableListOf<String>()
     val pageSize = 500
     var page = 0
     do {
         page++
-        val query = "${sonarInstanceToRemove}/api/rules/search" +
+        val query = "$sonarInstance/api/rules/search" +
                 "?ps=$pageSize" +
                 "&p=$page" +
                 "&f=lang" +

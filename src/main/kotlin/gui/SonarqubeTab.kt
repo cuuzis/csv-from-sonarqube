@@ -1,16 +1,12 @@
 package gui
 
-import sonarqube.getProjectsContainingString
-import sonarqube.getStringFromUrl
 import javafx.scene.control.*
 import javafx.scene.layout.HBox
 import javafx.scene.layout.VBox
 import java.net.UnknownHostException
 import javafx.scene.control.cell.PropertyValueFactory
 import javafx.scene.layout.Priority
-import sonarqube.SonarProject
-
-
+import sonarqube.*
 
 
 private val tableProjects = TableView<SonarProject>()
@@ -86,32 +82,31 @@ class SonarqubeTab(private val mainGui: MainGui) : Tab("Sonarqube") {
 /**
  * Queries projects available on Sonarqube server
  */
-class GetProjectListTask(private val sonarInstance: String) : GuiTask() {
+class GetProjectListTask(private val serverAddress: String) : GuiTask() {
 
-    override fun call(): List<SonarProject> {
+    override fun call(): SonarServer {
         super.call()
         updateMessage("Getting Sonarqube project list")
+        val sonarServer = SonarServer(serverAddress)
         try {
-            getStringFromUrl(sonarInstance)
-            val result = getProjectsContainingString(sonarInstance, "")
-            updateMessage("Retrieved ${result.size} projects from $sonarInstance")
-            return result
+            getStringFromUrl(serverAddress)
+            getProjectsContainingString(sonarServer, "")
+            updateMessage("Retrieved ${sonarServer.projects.size} projects from $serverAddress")
         } catch (e: UnknownHostException) {
             if (!isCancelled) {
-                updateMessage("Host $sonarInstance not found")
+                updateMessage("Host $serverAddress not found")
             }
         }
-        return listOf<SonarProject>()
+        return sonarServer
     }
 
     /**
      * Adds the retrieved project list to GUI
      */
     override fun succeeded() {
-        @Suppress("UNCHECKED_CAST")
-        val projectsOnServer: List<SonarProject> = value as List<SonarProject>
+        val sonarServer: SonarServer = value as SonarServer
         tableProjects.items.clear()
-        tableProjects.items.addAll(projectsOnServer)
+        tableProjects.items.addAll(sonarServer.projects)
     }
 }
 
@@ -120,10 +115,11 @@ class GetProjectListTask(private val sonarInstance: String) : GuiTask() {
  */
 class ExportIssuesTask(private val sonarProject: SonarProject) : GuiTask() {
 
-    override fun call(): Any? {
+    override fun call() {
         super.call()
         updateMessage("Exporting issues for ${sonarProject.getName()} (${sonarProject.getKey()})")
-        TODO("Save issues to file")
+        val savedFile = saveIssues(sonarProject, "OPEN")
+        updateMessage("Current issues saved to $savedFile")
     }
 
 

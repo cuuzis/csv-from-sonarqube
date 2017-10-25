@@ -1,9 +1,6 @@
 import com.opencsv.CSVReader
 import com.opencsv.CSVWriter
-import sonarqube.getProjectsContainingString
-import sonarqube.getRuleKeys
-import sonarqube.saveIssues
-import sonarqube.saveMeasureHistory
+import sonarqube.*
 import java.io.File
 import java.io.FileReader
 import java.io.FileWriter
@@ -12,7 +9,6 @@ import java.math.BigDecimal
 //val sonarInstance = "http://localhost:9000"
 //val sonarInstance = "http://sonar.inf.unibz.it"
 val workDir = "extraction" + File.separatorChar
-private val sonarInstanceToRemove = "http://sonar.inf.unibz.it"
 
 fun main(args: Array<String>) {
     val startTime = System.currentTimeMillis()
@@ -26,14 +22,14 @@ fun main(args: Array<String>) {
     //addRowDifferences("extraction/everything-by-commit-23-hist-projects.csv")
     //return
 
-    val ruleKeys = getRuleKeys()
+    val ruleKeys = getRuleKeys(sonarInstanceToRemove)
 
 
 
     // Qualitas Corpus
 
-    val projectKeys = getProjectsContainingString(sonarInstanceToRemove, "QC -")//QC - aspectj, QC - jboss, QC - jtopen
-            .map { it.getKey() }
+    //val projectKeys = getProjectsContainingString(sonarInstanceToRemove, "QC -")//QC - aspectj, QC - jboss, QC - jtopen
+    //        .map { it.getKey() }
     /*
     println("# of code smell types in projects")
     for (project in projectKeys) {
@@ -51,7 +47,7 @@ fun main(args: Array<String>) {
     }
 */
 
-    groupSmellsByProjects(projectKeys, "grouped-by-projects.csv")
+    //groupSmellsByProjects(projectKeys, "grouped-by-projects.csv")
 return
     /*
     for (sonarKey in projectKeys) {
@@ -90,7 +86,7 @@ return
 /*
     // extract issues from sonarInstance, takes long
     //for (projectKey in projectKeys)
-    //    sonarqube.saveIssues("current-issues.csv", projectKey, "OPEN", ruleKeys)
+    //    sonarqube.saveIssuesOld("current-issues.csv", projectKey, "OPEN", ruleKeys)
 
     // map sonar issues to arch cycle smells (~2h30min)
     //mapIssuesToCyclicDependencies(projectKeys, false)
@@ -255,7 +251,7 @@ return
         val faultsIssueCountFile = folderStr + "faults-issue-count.csv"
 
         makeEmptyFolder(folderStr)
-        saveIssues(issuesFile, project.sonarKey, "CLOSED,OPEN", ruleKeys)
+        saveIssuesOld(issuesFile, project.sonarKey, "CLOSED,OPEN", ruleKeys)
 
         saveMeasureHistory(measuresFile, project.sonarKey)
         //mergeAllToAnalysis(measuresFile, issuesFile, measuresAndIssuesFile)
