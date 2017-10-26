@@ -15,6 +15,8 @@ private val taskProgressBar = ProgressBar(0.0)
 private val taskStopButton = Button("Stop")
 private val taskStatusLabel = Label("")
 
+private val logTextArea = TextArea()
+
 /**
  * GUI main view
  */
@@ -43,7 +45,7 @@ class MainGui : Application() {
                 SonarqubeTab(this),
                 Tab("Github"),
                 Tab("Jira"),
-                Tab("Log"))
+                LogTab(logTextArea))
         rows.children.add(tabPane)
         VBox.setVgrow(tabPane, Priority.ALWAYS)
     }
@@ -115,6 +117,7 @@ abstract class GuiTask() : Task<Any>() {
 
     override fun updateMessage(message: String?) {
         super.updateMessage(message)
+        logTextArea.appendText(message + System.lineSeparator())
         println(message)
     }
 }
