@@ -322,8 +322,7 @@ fun saveIssues(project: SonarProject, statuses: String): String {
     val rows = mutableListOf<Array<String>>()
     saveIssuesForKeys(project.sonarServer.getRuleKeys(), project.getKey(), statuses, rows)
 
-    //val fileName = project.getKeyAsFolderName() + File.separatorChar + "current-issues.csv"
-    val fileName = project.getKeyAsFolderName() + "_" + "current-issues.csv"
+    val fileName = project.getProjectFolder() + File.separatorChar + "current-issues.csv"
     FileWriter(fileName).use { fw ->
         val csvWriter = CSVWriter(fw)
         csvWriter.writeNext(header)

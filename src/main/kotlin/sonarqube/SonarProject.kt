@@ -1,6 +1,7 @@
 package sonarqube
 
 import javafx.beans.property.SimpleStringProperty
+import java.io.File
 
 class SonarProject constructor(val sonarServer: SonarServer, key: String, name: String) {
 
@@ -28,8 +29,20 @@ class SonarProject constructor(val sonarServer: SonarServer, key: String, name: 
     /**
      * Replaces characters in project key, which are not valid in a directory name
      */
-    fun getKeyAsFolderName(): String {
+    private fun getKeyAsFolderName(): String {
         return getKey().replace("\\W".toRegex(),"-")
+    }
+
+    /**
+     * Returns the data extraction folder for the project.
+     * Creates this folder, if it does not exist.
+     */
+    fun getProjectFolder(): String {
+        val folder = File(getKeyAsFolderName())
+        if (!folder.exists()) {
+            folder.mkdir()
+        }
+        return folder.name
     }
 
 }
