@@ -76,20 +76,20 @@ fun  getProjectsContainingString(sonarServer: SonarServer, partOfName: String): 
 /**
  * Saves current measures for a project in a .csv file
  */
-fun saveCurrentMeasures(fileName: String, projectKey: String) {
+fun saveMeasures(project: SonarProject): String {
     val measureMap = mutableMapOf<String,String>()
-    measureMap.put("_project",projectKey)
     val measureQuery = "${sonarInstanceToRemove}/api/measures/component" +
-            "?componentKey=$projectKey" +
+            "?componentKey=${project.getKey()}" +
             "&metricKeys="
     val metricKeysLeft = getMetricKeys().toMutableList()
     while (!metricKeysLeft.isEmpty()) {
         var query = measureQuery
         while (!metricKeysLeft.isEmpty() && (query.length + metricKeysLeft.first().length < MAX_URL_LENGTH)) {
-            if (query == measureQuery)
+            if (query == measureQuery) {
                 query += metricKeysLeft.removeAt(0)
-            else
+            } else {
                 query += "," + metricKeysLeft.removeAt(0)
+            }
         }
         val measureResult = getStringFromUrl(query)
         val mainObject = parser.parse(measureResult) as JSONObject
@@ -106,12 +106,14 @@ fun saveCurrentMeasures(fileName: String, projectKey: String) {
     val measureMapOrdered = measureMap.toSortedMap()
     val header = measureMapOrdered.keys
     val row = measureMapOrdered.values
+    val fileName = project.getProjectFolder() + File.separatorChar + "current-measures.csv"
     FileWriter(fileName).use { fw ->
         val csvWriter = CSVWriter(fw)
         csvWriter.writeNext(header.toTypedArray())
         csvWriter.writeNext(row.toTypedArray())
     }
     println("Sonarqube current measures saved to $fileName")
+    return fileName
 }
 
 /*

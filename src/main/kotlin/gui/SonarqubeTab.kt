@@ -68,7 +68,16 @@ class SonarqubeTab(private val mainGui: MainGui) : Tab("Sonarqube") {
                 mainGui.runGuiTask(ExportIssuesTask(selectedProject))
             }
         }
-        val exportRow = HBoxRow(exportIssuesButton)
+        val exportMeasuresButton = Button("Export measures")
+        exportMeasuresButton.setOnAction {
+            val selectedProject = tableProjects.selectionModel.selectedItem
+            if (selectedProject == null) {
+                alertNoProjectSelected()
+            } else {
+                mainGui.runGuiTask(ExportMeasuresTask(selectedProject))
+            }
+        }
+        val exportRow = HBoxRow(exportIssuesButton, exportMeasuresButton)
         rows.children.add(exportRow)
     }
 
@@ -111,7 +120,7 @@ class GetProjectListTask(private val serverAddress: String) : GuiTask() {
 }
 
 /**
- * Saves issues for project
+ * Saves current issues for project
  */
 class ExportIssuesTask(private val sonarProject: SonarProject) : GuiTask() {
 
@@ -121,6 +130,18 @@ class ExportIssuesTask(private val sonarProject: SonarProject) : GuiTask() {
         val savedFile = saveIssues(sonarProject, "OPEN")
         updateMessage("Current issues saved to $savedFile")
     }
+}
 
 
+/**
+ * Saves current measures for project
+ */
+class ExportMeasuresTask(private val sonarProject: SonarProject) : GuiTask() {
+
+    override fun call() {
+        super.call()
+        updateMessage("Exporting measures for ${sonarProject.getName()} (${sonarProject.getKey()})")
+        val savedFile = saveMeasures(sonarProject)
+        updateMessage("Current measures saved to $savedFile")
+    }
 }
