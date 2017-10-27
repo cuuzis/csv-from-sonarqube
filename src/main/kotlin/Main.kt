@@ -253,7 +253,7 @@ return
         makeEmptyFolder(folderStr)
         saveIssuesOld(issuesFile, project.sonarKey, "CLOSED,OPEN", ruleKeys)
 
-        saveMeasureHistory(measuresFile, project.sonarKey)
+        //saveMeasureHistory(measuresFile, project.sonarKey)
         //mergeAllToAnalysis(measuresFile, issuesFile, measuresAndIssuesFile)
 
         saveJiraIssues(jiraFaultFile, project.jiraKey)

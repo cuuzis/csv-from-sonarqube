@@ -26,6 +26,8 @@
       <sourceFolder url="file://$MODULE_DIR$/src/main/resources" type="java-resource" />
       <sourceFolder url="file://$MODULE_DIR$/src/test/kotlin" isTestSource="true" />
       <sourceFolder url="file://$MODULE_DIR$/src/main/java" isTestSource="false" />
+      <excludeFolder url="file://$MODULE_DIR$/AppleTest6" />
+      <excludeFolder url="file://$MODULE_DIR$/ApplesTest2" />
       <excludeFolder url="file://$MODULE_DIR$/architecture-smells-arcan" />
       <excludeFolder url="file://$MODULE_DIR$/binaries" />
       <excludeFolder url="file://$MODULE_DIR$/extraction" />

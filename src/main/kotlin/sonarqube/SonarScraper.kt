@@ -200,15 +200,15 @@ private fun saveCurrentMeasuresAndIssues(projectKeys: List<String>, metricKeys: 
 /**
  * Saves past measures for a project in a .csv file
  */
-fun saveMeasureHistory(fileName: String, projectKey: String) {
-    val metricKeys = getNonemptyMetricKeys(projectKey)
+fun saveMeasureHistory(project: SonarProject): String {
+    val metricKeys = getNonemptyMetricKeys(project.getKey())
     val measureMap = sortedMapOf<String, Array<String>>()
     val pageSize = 500
     var currentPage = 0
     do {
         currentPage++
         val measureQuery = "${sonarInstanceToRemove}/api/measures/search_history" +
-                "?component=" + projectKey +
+                "?component=${project.getKey()}" +
                 "&ps=$pageSize" +
                 "&p=$currentPage" +
                 "&metrics=" + metricKeys.joinToString(",")
@@ -237,11 +237,13 @@ fun saveMeasureHistory(fileName: String, projectKey: String) {
     for ((key, values) in measureMap) {
         rows.add((listOf(key) + values))
     }
+    val fileName = project.getProjectFolder() + File.separatorChar + "measure-history.csv"
     FileWriter(fileName).use { fw ->
         val csvWriter = CSVWriter(fw)
         csvWriter.writeAll(rows.map { it.toTypedArray() })
     }
     println("Sonarqube measure history saved to $fileName")
+    return fileName
 }
 
 /**

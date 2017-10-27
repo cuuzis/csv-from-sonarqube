@@ -68,7 +68,16 @@ class SonarqubeTab(private val mainGui: MainGui) : Tab("Sonarqube") {
                 mainGui.runGuiTask(ExportIssuesTask(selectedProject))
             }
         }
-        val exportMeasuresButton = Button("Export measures")
+        val exportMeasureHistoryButton = Button("Export measures")
+        exportMeasureHistoryButton.setOnAction {
+            val selectedProject = tableProjects.selectionModel.selectedItem
+            if (selectedProject == null) {
+                alertNoProjectSelected()
+            } else {
+                mainGui.runGuiTask(ExportMeasureHistoryTask(selectedProject))
+            }
+        }
+        val exportMeasuresButton = Button("Export current measures")
         exportMeasuresButton.setOnAction {
             val selectedProject = tableProjects.selectionModel.selectedItem
             if (selectedProject == null) {
@@ -77,7 +86,7 @@ class SonarqubeTab(private val mainGui: MainGui) : Tab("Sonarqube") {
                 mainGui.runGuiTask(ExportMeasuresTask(selectedProject))
             }
         }
-        val exportRow = HBoxRow(exportIssuesButton, exportMeasuresButton)
+        val exportRow = HBoxRow(exportIssuesButton, exportMeasureHistoryButton, exportMeasuresButton)
         rows.children.add(exportRow)
     }
 
@@ -132,6 +141,18 @@ class ExportIssuesTask(private val sonarProject: SonarProject) : GuiTask() {
     }
 }
 
+/**
+ * Saves current measures for project
+ */
+class ExportMeasureHistoryTask(private val sonarProject: SonarProject) : GuiTask() {
+
+    override fun call() {
+        super.call()
+        updateMessage("Exporting measure history for ${sonarProject.getName()} (${sonarProject.getKey()})")
+        val savedFile = saveMeasureHistory(sonarProject)
+        updateMessage("Measure history saved to $savedFile")
+    }
+}
 
 /**
  * Saves current measures for project
@@ -140,7 +161,7 @@ class ExportMeasuresTask(private val sonarProject: SonarProject) : GuiTask() {
 
     override fun call() {
         super.call()
-        updateMessage("Exporting measures for ${sonarProject.getName()} (${sonarProject.getKey()})")
+        updateMessage("Exporting current measures for ${sonarProject.getName()} (${sonarProject.getKey()})")
         val savedFile = saveMeasures(sonarProject)
         updateMessage("Current measures saved to $savedFile")
     }
