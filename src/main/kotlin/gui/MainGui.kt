@@ -36,7 +36,7 @@ class MainGui : Application() {
         addStatusBar(rows)
 
         primaryStage.title = "Sonarqube issue extractor"
-        primaryStage.scene = Scene(rows, 600.0, 500.0)
+        primaryStage.scene = Scene(rows, 1000.0, 700.0)
         primaryStage.show()
     }
 

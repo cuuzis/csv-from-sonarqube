@@ -3,10 +3,12 @@ package sonarqube
 import javafx.beans.property.SimpleStringProperty
 import java.io.File
 
-class SonarProject constructor(val sonarServer: SonarServer, key: String, name: String) {
+class SonarProject constructor(val sonarServer: SonarServer, key: String, name: String, gitLink: String, jiraLink: String) {
 
     private val key: SimpleStringProperty = SimpleStringProperty(key)
     private val name: SimpleStringProperty = SimpleStringProperty(name)
+    private var gitLink: SimpleStringProperty = SimpleStringProperty(gitLink)
+    private var jiraLink: SimpleStringProperty = SimpleStringProperty(jiraLink)
 
     init {
         sonarServer.projects.add(this)
@@ -24,6 +26,28 @@ class SonarProject constructor(val sonarServer: SonarServer, key: String, name: 
      */
     fun getName(): String {
         return name.get()
+    }
+
+    /**
+     * Getter for TableColumn "gitLink"
+     */
+    fun getGitLink(): String {
+        return gitLink.get()
+    }
+
+    fun setGitLink(gitLink: String) {
+        this.gitLink.set(gitLink)
+    }
+
+    /**
+     * Getter for TableColumn "jiraLink"
+     */
+    fun getJiraLink(): String {
+        return jiraLink.get()
+    }
+
+    fun setJiraLink(gitLink: String) {
+        this.jiraLink.set(gitLink)
     }
 
     /**

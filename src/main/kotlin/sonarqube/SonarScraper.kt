@@ -66,7 +66,7 @@ fun  getProjectsContainingString(sonarServer: SonarServer, partOfName: String): 
         val pagingObject = mainObject["paging"] as JSONObject
         val componentArray = mainObject["components"] as JSONArray
         val projectsOnPage = componentArray.filterIsInstance<JSONObject>().map {
-            SonarProject(sonarServer, it["key"].toString(), it["name"].toString())
+            SonarProject(sonarServer, it["key"].toString(), it["name"].toString(), "", "")
         }
         projectList.addAll(projectsOnPage)
     } while (pageSize * currentPage < pagingObject["total"].toString().toInt())

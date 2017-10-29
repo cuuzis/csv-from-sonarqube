@@ -1,10 +1,12 @@
 package gui
 
+import javafx.event.EventHandler
 import javafx.scene.control.*
 import javafx.scene.layout.HBox
 import javafx.scene.layout.VBox
 import java.net.UnknownHostException
 import javafx.scene.control.cell.PropertyValueFactory
+import javafx.scene.control.cell.TextFieldTableCell
 import javafx.scene.layout.Priority
 import sonarqube.*
 
@@ -40,12 +42,33 @@ class SonarqubeTab(private val mainGui: MainGui) : Tab("Sonarqube") {
 
     private fun addProjectsRow(rows: VBox) {
         val labelProjects = Label("Projects on server:")
+
         val keyCol: TableColumn<SonarProject, SonarProject> = TableColumn("key")
         keyCol.cellValueFactory = PropertyValueFactory<SonarProject, SonarProject>("key")
+
         val nameCol: TableColumn<SonarProject, SonarProject> = TableColumn("name")
         nameCol.cellValueFactory = PropertyValueFactory<SonarProject, SonarProject>("name")
 
-        tableProjects.columns.addAll(keyCol, nameCol)
+        val gitLinkCol: TableColumn<SonarProject, String> = TableColumn("git link")
+        gitLinkCol.cellValueFactory = PropertyValueFactory<SonarProject, String>("gitLink")
+        gitLinkCol.cellFactory = TextFieldTableCell.forTableColumn()
+        gitLinkCol.onEditCommit = EventHandler<TableColumn.CellEditEvent<SonarProject, String>> {
+            val sonarProject = it.tableView.items[it.tablePosition.row]
+            sonarProject.setGitLink(it.newValue)
+            println("${sonarProject.getKey()}: git link set to ${it.newValue}")
+        }
+
+        val jiraLinkCol: TableColumn<SonarProject, String> = TableColumn("jira link")
+        jiraLinkCol.cellValueFactory = PropertyValueFactory<SonarProject, String>("jiraLink")
+        jiraLinkCol.cellFactory = TextFieldTableCell.forTableColumn()
+        jiraLinkCol.onEditCommit = EventHandler<TableColumn.CellEditEvent<SonarProject, String>> {
+            val sonarProject = it.tableView.items[it.tablePosition.row]
+            sonarProject.setJiraLink(it.newValue)
+            println("${sonarProject.getKey()}: jira link set to ${it.newValue}")
+        }
+
+        tableProjects.isEditable = true
+        tableProjects.columns.addAll(keyCol, nameCol, gitLinkCol, jiraLinkCol)
         tableProjects.columnResizePolicy = TableView.CONSTRAINED_RESIZE_POLICY
         // TODO: multiple project selection
         // tableProjects.selectionModel.selectionMode = SelectionMode.MULTIPLE
