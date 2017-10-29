@@ -43,8 +43,6 @@ class MainGui : Application() {
     private fun addMainContent(rows: VBox) {
         val tabPane = TabPane(
                 SonarqubeTab(this),
-                Tab("Github"),
-                Tab("Jira"),
                 LogTab(logTextArea))
         rows.children.add(tabPane)
         VBox.setVgrow(tabPane, Priority.ALWAYS)

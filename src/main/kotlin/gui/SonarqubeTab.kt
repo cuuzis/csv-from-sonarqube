@@ -1,6 +1,7 @@
 package gui
 
 import javafx.event.EventHandler
+import javafx.geometry.Orientation
 import javafx.scene.control.*
 import javafx.scene.layout.HBox
 import javafx.scene.layout.VBox
@@ -19,14 +20,18 @@ private val tableProjects = TableView<SonarProject>()
 class SonarqubeTab(private val mainGui: MainGui) : Tab("Sonarqube") {
 
     private val textServer = TextField()
+    private val saveCommitsButton = Button("Save git commits")
+    private val saveFaultsButton = Button("Save jira faults")
 
     init {
         val rows = VBox()
         addServerRow(rows)
         addProjectsRow(rows)
+        addSeparator(rows, "SonarQube")
         addSonarqubeRow(rows)
-        addGitRow(rows)
-        addJiraRow(rows)
+        addSeparator(rows, "Git & Jira")
+        addGitAndJiraRow(rows)
+        rows.children.add(HBoxRow())
         this.content = rows
         this.isClosable = false
     }
@@ -55,18 +60,18 @@ class SonarqubeTab(private val mainGui: MainGui) : Tab("Sonarqube") {
         gitLinkCol.cellValueFactory = PropertyValueFactory<SonarProject, String>("gitLink")
         gitLinkCol.cellFactory = TextFieldTableCell.forTableColumn()
         gitLinkCol.onEditCommit = EventHandler<TableColumn.CellEditEvent<SonarProject, String>> {
-            val sonarProject = it.tableView.items[it.tablePosition.row]
-            sonarProject.setGitLink(it.newValue)
-            println("${sonarProject.getKey()}: git link set to ${it.newValue}")
+            val selectedProject = it.tableView.items[it.tablePosition.row]
+            selectedProject.setGitLink(it.newValue)
+            saveCommitsButton.isDisable = selectedProject.getGitLink() == ""
         }
 
         val jiraLinkCol: TableColumn<SonarProject, String> = TableColumn("jira link")
         jiraLinkCol.cellValueFactory = PropertyValueFactory<SonarProject, String>("jiraLink")
         jiraLinkCol.cellFactory = TextFieldTableCell.forTableColumn()
         jiraLinkCol.onEditCommit = EventHandler<TableColumn.CellEditEvent<SonarProject, String>> {
-            val sonarProject = it.tableView.items[it.tablePosition.row]
-            sonarProject.setJiraLink(it.newValue)
-            println("${sonarProject.getKey()}: jira link set to ${it.newValue}")
+            val selectedProject = it.tableView.items[it.tablePosition.row]
+            selectedProject.setJiraLink(it.newValue)
+            saveFaultsButton.isDisable = selectedProject.getJiraLink() == ""
         }
 
         tableProjects.isEditable = true
@@ -74,8 +79,9 @@ class SonarqubeTab(private val mainGui: MainGui) : Tab("Sonarqube") {
         tableProjects.columnResizePolicy = TableView.CONSTRAINED_RESIZE_POLICY
         // TODO: multiple project selection
         // tableProjects.selectionModel.selectionMode = SelectionMode.MULTIPLE
-        tableProjects.selectionModel.selectedItemProperty().addListener { _, oldValue, newValue ->
-            println("ListView selection changed from $oldValue to $newValue")
+        tableProjects.selectionModel.selectedItemProperty().addListener { _, _, selectedProject ->
+            saveCommitsButton.isDisable = selectedProject.getGitLink() == ""
+            saveFaultsButton.isDisable = selectedProject.getJiraLink() == ""
         }
 
         val projectsRow = HBoxRow(labelProjects, tableProjects)
@@ -84,7 +90,7 @@ class SonarqubeTab(private val mainGui: MainGui) : Tab("Sonarqube") {
     }
 
     private fun addSonarqubeRow(rows: VBox) {
-        val exportIssuesButton = Button("Export issues")
+        val exportIssuesButton = Button("Save issues")
         exportIssuesButton.setOnAction {
             val selectedProject = tableProjects.selectionModel.selectedItem
             if (selectedProject == null) {
@@ -93,7 +99,7 @@ class SonarqubeTab(private val mainGui: MainGui) : Tab("Sonarqube") {
                 mainGui.runGuiTask(ExportIssuesTask(selectedProject))
             }
         }
-        val exportMeasureHistoryButton = Button("Export measures")
+        val exportMeasureHistoryButton = Button("Save measures")
         exportMeasureHistoryButton.setOnAction {
             val selectedProject = tableProjects.selectionModel.selectedItem
             if (selectedProject == null) {
@@ -102,7 +108,7 @@ class SonarqubeTab(private val mainGui: MainGui) : Tab("Sonarqube") {
                 mainGui.runGuiTask(ExportMeasureHistoryTask(selectedProject))
             }
         }
-        val exportMeasuresButton = Button("Export current measures")
+        val exportMeasuresButton = Button("Save current measures")
         exportMeasuresButton.setOnAction {
             val selectedProject = tableProjects.selectionModel.selectedItem
             if (selectedProject == null) {
@@ -115,8 +121,17 @@ class SonarqubeTab(private val mainGui: MainGui) : Tab("Sonarqube") {
         rows.children.add(exportRow)
     }
 
-    private fun addGitRow(rows: VBox) {
-        val saveCommitsButton = Button("Save git commits")
+    private fun addSeparator(rows: VBox, label: String) {
+        val separatorBefore = Separator(Orientation.HORIZONTAL)
+        val separatorAfter = Separator(Orientation.HORIZONTAL)
+        HBox.setHgrow(separatorBefore, Priority.SOMETIMES)
+        HBox.setHgrow(separatorAfter, Priority.SOMETIMES)
+        val separatorRow = HBoxRow(separatorBefore, Label(label), separatorAfter)
+        rows.children.add(separatorRow)
+    }
+
+    private fun addGitAndJiraRow(rows: VBox) {
+        saveCommitsButton.isDisable = true
         saveCommitsButton.setOnAction {
             val selectedProject = tableProjects.selectionModel.selectedItem
             if (selectedProject == null) {
@@ -126,12 +141,8 @@ class SonarqubeTab(private val mainGui: MainGui) : Tab("Sonarqube") {
                 //mainGui.runGuiTask(ExportCommitsTask(selectedProject))
             }
         }
-        val exportRow = HBoxRow(saveCommitsButton)
-        rows.children.add(exportRow)
-    }
 
-    private fun addJiraRow(rows: VBox) {
-        val saveFaultsButton = Button("Save jira faults")
+        saveFaultsButton.isDisable = true
         saveFaultsButton.setOnAction {
             val selectedProject = tableProjects.selectionModel.selectedItem
             if (selectedProject == null) {
@@ -141,7 +152,8 @@ class SonarqubeTab(private val mainGui: MainGui) : Tab("Sonarqube") {
                 //mainGui.runGuiTask(ExportFaultsTask(selectedProject))
             }
         }
-        val exportRow = HBoxRow(saveFaultsButton)
+
+        val exportRow = HBoxRow(saveCommitsButton, saveFaultsButton)
         rows.children.add(exportRow)
     }
 
