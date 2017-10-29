@@ -24,7 +24,9 @@ class SonarqubeTab(private val mainGui: MainGui) : Tab("Sonarqube") {
         val rows = VBox()
         addServerRow(rows)
         addProjectsRow(rows)
-        addExportRow(rows)
+        addSonarqubeRow(rows)
+        addGitRow(rows)
+        addJiraRow(rows)
         this.content = rows
         this.isClosable = false
     }
@@ -81,7 +83,7 @@ class SonarqubeTab(private val mainGui: MainGui) : Tab("Sonarqube") {
         rows.children.add(projectsRow)
     }
 
-    private fun addExportRow(rows: VBox) {
+    private fun addSonarqubeRow(rows: VBox) {
         val exportIssuesButton = Button("Export issues")
         exportIssuesButton.setOnAction {
             val selectedProject = tableProjects.selectionModel.selectedItem
@@ -110,6 +112,36 @@ class SonarqubeTab(private val mainGui: MainGui) : Tab("Sonarqube") {
             }
         }
         val exportRow = HBoxRow(exportIssuesButton, exportMeasureHistoryButton, exportMeasuresButton)
+        rows.children.add(exportRow)
+    }
+
+    private fun addGitRow(rows: VBox) {
+        val saveCommitsButton = Button("Save git commits")
+        saveCommitsButton.setOnAction {
+            val selectedProject = tableProjects.selectionModel.selectedItem
+            if (selectedProject == null) {
+                alertNoProjectSelected()
+            } else {
+                TODO("Export commits")
+                //mainGui.runGuiTask(ExportCommitsTask(selectedProject))
+            }
+        }
+        val exportRow = HBoxRow(saveCommitsButton)
+        rows.children.add(exportRow)
+    }
+
+    private fun addJiraRow(rows: VBox) {
+        val saveFaultsButton = Button("Save jira faults")
+        saveFaultsButton.setOnAction {
+            val selectedProject = tableProjects.selectionModel.selectedItem
+            if (selectedProject == null) {
+                alertNoProjectSelected()
+            } else {
+                TODO("Export faults")
+                //mainGui.runGuiTask(ExportFaultsTask(selectedProject))
+            }
+        }
+        val exportRow = HBoxRow(saveFaultsButton)
         rows.children.add(exportRow)
     }
 
