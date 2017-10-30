@@ -3,14 +3,22 @@ package sonarqube
 import javafx.beans.property.SimpleStringProperty
 import java.io.File
 
-class SonarProject constructor(val sonarServer: SonarServer, key: String, name: String, gitLink: String, jiraLink: String) {
+class SonarProject constructor(val sonarServer: SonarServer, key: String, name: String) {
 
     private val key: SimpleStringProperty = SimpleStringProperty(key)
     private val name: SimpleStringProperty = SimpleStringProperty(name)
-    private var gitLink: SimpleStringProperty = SimpleStringProperty(gitLink)
-    private var jiraLink: SimpleStringProperty = SimpleStringProperty(jiraLink)
+    private var gitLink: SimpleStringProperty
+    private var jiraLink: SimpleStringProperty
 
     init {
+        val storedProjectInfo = getStoredProjectInfo(key)
+        if (storedProjectInfo == null) {
+            gitLink = SimpleStringProperty("")
+            jiraLink = SimpleStringProperty("")
+        } else {
+            gitLink = SimpleStringProperty(storedProjectInfo.gitLink)
+            jiraLink = SimpleStringProperty(storedProjectInfo.jiraLink)
+        }
         sonarServer.projects.add(this)
     }
 
@@ -36,6 +44,7 @@ class SonarProject constructor(val sonarServer: SonarServer, key: String, name: 
     }
 
     fun setGitLink(gitLink: String) {
+        updateGitLinkCSV(getKey(), gitLink)
         this.gitLink.set(gitLink)
     }
 
@@ -46,8 +55,9 @@ class SonarProject constructor(val sonarServer: SonarServer, key: String, name: 
         return jiraLink.get()
     }
 
-    fun setJiraLink(gitLink: String) {
-        this.jiraLink.set(gitLink)
+    fun setJiraLink(jiraLink: String) {
+        updateJiraLinkCSV(getKey(), jiraLink)
+        this.jiraLink.set(jiraLink)
     }
 
     /**
@@ -68,5 +78,4 @@ class SonarProject constructor(val sonarServer: SonarServer, key: String, name: 
         }
         return folder.name
     }
-
 }
