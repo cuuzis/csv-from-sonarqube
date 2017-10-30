@@ -7,6 +7,7 @@ import java.io.FileWriter
 import java.time.Instant
 import java.time.temporal.ChronoUnit
 import org.eclipse.jgit.treewalk.CanonicalTreeParser
+import sonarqube.SonarProject
 
 private val emptyTreeHash = "4b825dc642cb6eb9a060e54bf8d69288fbee4904"
 
@@ -73,6 +74,74 @@ fun saveGitCommits(fileName: String, repositoryURL: String) {
 }
 
 /**
+ * Saves git commits for a project in a csv file
+ */
+fun saveGitCommits(sonarProject: SonarProject): String {
+    println("Saving git commits")
+    val header = listOf(
+            "git-date-original",
+            "git-date-sonarqube",
+            "git-hash",
+            "git-message",
+            "git-committer",
+            "git-total-committers",
+            //"git-files-in-project",
+            "git-changed-files")
+    val rows = mutableListOf<List<String>>()
+    rows.add(header)
+
+    // clone repository into temp folder and access data
+    val fileName = sonarProject.getProjectFolder() + File.separatorChar + "git-commits.csv"
+    val checkoutFolder = fileName.removeSuffix(fileName.split(File.separatorChar).last())
+    val localPath = File(checkoutFolder + "tmpGitRepo")
+    val git = cloneRemoteRepository(sonarProject.getGitLink(), localPath)
+    //val git = openLocalRepository(File(checkoutFolder + "tmpGitRepo/.git"))
+    try {
+        val logEntries = git.log()
+                .call()
+                .reversed()
+
+        val logDatesRaw = mutableListOf<Instant>()
+        logEntries.mapTo(logDatesRaw) { Instant.ofEpochSecond(it.commitTime.toLong()) }
+        val logDatesSonarqube = smoothDates(logDatesRaw)
+
+        val totalCommitters = mutableSetOf<String>()
+        var oldHash = emptyTreeHash
+        for ((idx, log) in logEntries.withIndex()) {
+            val row = mutableListOf<String>()
+            row.add(Instant.ofEpochSecond(log.commitTime.toLong()).toString())
+            row.add(logDatesSonarqube[idx].toString())
+            row.add(log.name)//hash
+            row.add(log.shortMessage)
+            row.add(log.committerIdent.emailAddress)
+            totalCommitters.add(log.committerIdent.emailAddress)
+            row.add(totalCommitters.size.toString())
+            //row.add(getFilesDiff(emptyTreeHash, log.name, git).joinToString(";")) // files in project
+            row.add(getFilesDiff(oldHash, log.name, git).joinToString(";"))
+            rows.add(row)
+            oldHash = log.name
+        }
+    } finally {
+        git.close()
+    }
+
+    // save data to file
+    FileWriter(fileName).use { fw ->
+        val csvWriter = CSVWriter(fw)
+        csvWriter.writeAll(rows.map { it.toTypedArray() })
+        println("Git commit data saved to $fileName")
+    }
+
+    // delete temp folder
+    if (localPath.deleteRecursively())
+        println("Deleted '$localPath' successfully")
+    else
+        println("Could not delete '$localPath'")
+
+    return fileName
+}
+
+/**
  * Returns a list of files modified within this revision.
  */
 fun getFilesDiff(oldHash: String, newHash: String, git: Git): List<String> {
@@ -113,7 +182,7 @@ fun cloneRemoteRepository(repositoryURL: String, directory: File): Git {
 }
 
 fun openLocalRepository(repositoryFile: File): Git {
-    val builder: FileRepositoryBuilder = FileRepositoryBuilder()
+    val builder = FileRepositoryBuilder()
     try {
         val repository = builder.setGitDir(repositoryFile)
                 .readEnvironment()

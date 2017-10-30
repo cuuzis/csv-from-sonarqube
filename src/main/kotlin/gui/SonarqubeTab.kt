@@ -9,6 +9,7 @@ import java.net.UnknownHostException
 import javafx.scene.control.cell.PropertyValueFactory
 import javafx.scene.control.cell.TextFieldTableCell
 import javafx.scene.layout.Priority
+import saveGitCommits
 import saveJiraIssues
 import sonarqube.*
 
@@ -138,8 +139,7 @@ class SonarqubeTab(private val mainGui: MainGui) : Tab("Sonarqube") {
             if (selectedProject == null) {
                 alertNoProjectSelected()
             } else {
-                TODO("Export commits")
-                //mainGui.runGuiTask(ExportCommitsTask(selectedProject))
+                mainGui.runGuiTask(ExportCommitsTask(selectedProject))
             }
         }
 
@@ -234,7 +234,6 @@ class ExportMeasuresTask(private val sonarProject: SonarProject) : GuiTask() {
     }
 }
 
-
 /**
  * Saves jira faults for project
  */
@@ -245,6 +244,20 @@ class ExportFaultsTask(private val sonarProject: SonarProject) : GuiTask() {
         updateMessage("Exporting jira faults for ${sonarProject.getName()} (${sonarProject.getKey()})")
         val savedFile = saveJiraIssues(sonarProject)
         updateMessage("Jira faults saved to $savedFile")
+    }
+
+}
+
+/**
+ * Saves git commits for project
+ */
+class ExportCommitsTask(private val sonarProject: SonarProject) : GuiTask() {
+
+    override fun call() {
+        super.call()
+        updateMessage("Exporting git commits for ${sonarProject.getName()} (${sonarProject.getKey()})")
+        val savedFile = saveGitCommits(sonarProject)
+        updateMessage("Git commits saved to $savedFile")
     }
 
 }
