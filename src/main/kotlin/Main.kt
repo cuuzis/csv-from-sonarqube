@@ -256,7 +256,6 @@ return
         //saveMeasureHistory(measuresFile, project.sonarKey)
         //mergeAllToAnalysis(measuresFile, issuesFile, measuresAndIssuesFile)
 
-        saveGitCommits(gitCommitFile, project.gitLink)
 
         mapFaultFileCommit(issuesFile, jiraFaultFile, gitCommitFile, measuresFile, faultFileCommitFile, project.dailyAnalysis)
         val rFileList = listOf(
