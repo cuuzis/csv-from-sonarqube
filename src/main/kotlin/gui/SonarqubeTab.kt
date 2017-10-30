@@ -1,5 +1,6 @@
 package gui
 
+import javafx.collections.ListChangeListener
 import javafx.event.EventHandler
 import javafx.geometry.Orientation
 import javafx.scene.control.*
@@ -79,11 +80,10 @@ class SonarqubeTab(private val mainGui: MainGui) : Tab("Sonarqube") {
         tableProjects.isEditable = true
         tableProjects.columns.addAll(keyCol, nameCol, gitLinkCol, jiraLinkCol)
         tableProjects.columnResizePolicy = TableView.CONSTRAINED_RESIZE_POLICY
-        // TODO: multiple project selection
-        // tableProjects.selectionModel.selectionMode = SelectionMode.MULTIPLE
-        tableProjects.selectionModel.selectedItemProperty().addListener { _, _, selectedProject ->
-            saveCommitsButton.isDisable = selectedProject.getGitLink() == ""
-            saveFaultsButton.isDisable = selectedProject.getJiraLink() == ""
+        tableProjects.selectionModel.selectionMode = SelectionMode.MULTIPLE
+        tableProjects.selectionModel.selectedItems.addListener { _: ListChangeListener.Change<*> ->
+            saveCommitsButton.isDisable = tableProjects.selectionModel.selectedItems.any { it.getGitLink() == "" }
+            saveFaultsButton.isDisable = tableProjects.selectionModel.selectedItems.any { it.getJiraLink() == "" }
         }
 
         val projectsRow = HBoxRow(labelProjects, tableProjects)
@@ -94,29 +94,35 @@ class SonarqubeTab(private val mainGui: MainGui) : Tab("Sonarqube") {
     private fun addSonarqubeRow(rows: VBox) {
         val exportIssuesButton = Button("Save issues")
         exportIssuesButton.setOnAction {
-            val selectedProject = tableProjects.selectionModel.selectedItem
-            if (selectedProject == null) {
+            val selectedProjects = tableProjects.selectionModel.selectedItems
+            if (selectedProjects.isEmpty()) {
                 alertNoProjectSelected()
             } else {
-                mainGui.runGuiTask(ExportIssuesTask(selectedProject))
+                selectedProjects.forEach {
+                    mainGui.runGuiTask(ExportIssuesTask(it))
+                }
             }
         }
         val exportMeasureHistoryButton = Button("Save measures")
         exportMeasureHistoryButton.setOnAction {
-            val selectedProject = tableProjects.selectionModel.selectedItem
-            if (selectedProject == null) {
+            val selectedProjects = tableProjects.selectionModel.selectedItems
+            if (selectedProjects.isEmpty()) {
                 alertNoProjectSelected()
             } else {
-                mainGui.runGuiTask(ExportMeasureHistoryTask(selectedProject))
+                selectedProjects.forEach {
+                    mainGui.runGuiTask(ExportMeasureHistoryTask(it))
+                }
             }
         }
         val exportMeasuresButton = Button("Save current measures")
         exportMeasuresButton.setOnAction {
-            val selectedProject = tableProjects.selectionModel.selectedItem
-            if (selectedProject == null) {
+            val selectedProjects = tableProjects.selectionModel.selectedItems
+            if (selectedProjects.isEmpty()) {
                 alertNoProjectSelected()
             } else {
-                mainGui.runGuiTask(ExportMeasuresTask(selectedProject))
+                selectedProjects.forEach {
+                    mainGui.runGuiTask(ExportMeasuresTask(it))
+                }
             }
         }
         val exportRow = HBoxRow(exportIssuesButton, exportMeasureHistoryButton, exportMeasuresButton)
@@ -135,21 +141,17 @@ class SonarqubeTab(private val mainGui: MainGui) : Tab("Sonarqube") {
     private fun addGitAndJiraRow(rows: VBox) {
         saveCommitsButton.isDisable = true
         saveCommitsButton.setOnAction {
-            val selectedProject = tableProjects.selectionModel.selectedItem
-            if (selectedProject == null) {
-                alertNoProjectSelected()
-            } else {
-                mainGui.runGuiTask(ExportCommitsTask(selectedProject))
+            val selectedProjects = tableProjects.selectionModel.selectedItems
+            selectedProjects.forEach {
+                mainGui.runGuiTask(ExportCommitsTask(it))
             }
         }
 
         saveFaultsButton.isDisable = true
         saveFaultsButton.setOnAction {
-            val selectedProject = tableProjects.selectionModel.selectedItem
-            if (selectedProject == null) {
-                alertNoProjectSelected()
-            } else {
-                mainGui.runGuiTask(ExportFaultsTask(selectedProject))
+            val selectedProjects = tableProjects.selectionModel.selectedItems
+            selectedProjects.forEach {
+                mainGui.runGuiTask(ExportFaultsTask(it))
             }
         }
 

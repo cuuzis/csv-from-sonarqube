@@ -8,8 +8,6 @@ import javafx.scene.layout.VBox
 import sonarqube.*
 import java.net.UnknownHostException
 
-private val tableProjects = TableView<SonarProject>()
-
 /**
  * GUI to log performed actions
  */
