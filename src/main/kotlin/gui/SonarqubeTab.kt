@@ -9,6 +9,7 @@ import java.net.UnknownHostException
 import javafx.scene.control.cell.PropertyValueFactory
 import javafx.scene.control.cell.TextFieldTableCell
 import javafx.scene.layout.Priority
+import saveJiraIssues
 import sonarqube.*
 
 
@@ -19,7 +20,7 @@ private val tableProjects = TableView<SonarProject>()
  */
 class SonarqubeTab(private val mainGui: MainGui) : Tab("Sonarqube") {
 
-    private val textServer = TextField()
+    private val serverTextField = TextField()
     private val saveCommitsButton = Button("Save git commits")
     private val saveFaultsButton = Button("Save jira faults")
 
@@ -38,12 +39,12 @@ class SonarqubeTab(private val mainGui: MainGui) : Tab("Sonarqube") {
 
     private fun addServerRow(rows: VBox) {
         val labelServer = Label("Sonarqube server:")
-        textServer.textProperty().addListener({ _, _, newServerString ->
+        serverTextField.textProperty().addListener({ _, _, newServerString ->
             mainGui.runGuiTask(GetProjectListTask(newServerString))
         })
-        textServer.textProperty().set("http://sonar.inf.unibz.it")
-        val serverRow = HBoxRow(labelServer, textServer)
-        HBox.setHgrow(textServer, Priority.SOMETIMES)
+        serverTextField.textProperty().set("http://sonar.inf.unibz.it")
+        val serverRow = HBoxRow(labelServer, serverTextField)
+        HBox.setHgrow(serverTextField, Priority.SOMETIMES)
         rows.children.add(serverRow)
     }
 
@@ -148,8 +149,7 @@ class SonarqubeTab(private val mainGui: MainGui) : Tab("Sonarqube") {
             if (selectedProject == null) {
                 alertNoProjectSelected()
             } else {
-                TODO("Export faults")
-                //mainGui.runGuiTask(ExportFaultsTask(selectedProject))
+                mainGui.runGuiTask(ExportFaultsTask(selectedProject))
             }
         }
 
@@ -209,7 +209,7 @@ class ExportIssuesTask(private val sonarProject: SonarProject) : GuiTask() {
 }
 
 /**
- * Saves current measures for project
+ * Saves measure history for project
  */
 class ExportMeasureHistoryTask(private val sonarProject: SonarProject) : GuiTask() {
 
@@ -232,4 +232,19 @@ class ExportMeasuresTask(private val sonarProject: SonarProject) : GuiTask() {
         val savedFile = saveMeasures(sonarProject)
         updateMessage("Current measures saved to $savedFile")
     }
+}
+
+
+/**
+ * Saves jira faults for project
+ */
+class ExportFaultsTask(private val sonarProject: SonarProject) : GuiTask() {
+
+    override fun call() {
+        super.call()
+        updateMessage("Exporting jira faults for ${sonarProject.getName()} (${sonarProject.getKey()})")
+        val savedFile = saveJiraIssues(sonarProject)
+        updateMessage("Jira faults saved to $savedFile")
+    }
+
 }
