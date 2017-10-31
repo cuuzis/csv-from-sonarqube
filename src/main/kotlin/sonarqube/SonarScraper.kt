@@ -3,6 +3,9 @@ package sonarqube
 import com.opencsv.CSVWriter
 import com.opencsv.bean.CsvToBeanBuilder
 import csv_model.extracted.SonarIssues
+import gui.logTextArea
+import gui.logger
+import info
 import org.json.simple.JSONArray
 import org.json.simple.JSONObject
 import org.json.simple.parser.JSONParser
@@ -49,7 +52,7 @@ fun  getInstantFromSonarDate(sonarDate: String): Instant {
  */
 // TODO: refactor return type, name
 fun  getProjectsContainingString(sonarServer: SonarServer, partOfName: String): List<SonarProject> {
-    println("Requesting projects containing '$partOfName'")
+    logger.info(logTextArea, "Requesting projects containing '$partOfName'")
     val projectList = mutableListOf<SonarProject>()
     val pageSize = 500
     var currentPage = 0
@@ -112,7 +115,7 @@ fun saveMeasures(project: SonarProject): String {
         csvWriter.writeNext(header.toTypedArray())
         csvWriter.writeNext(row.toTypedArray())
     }
-    println("Sonarqube current measures saved to $fileName")
+    logger.info(logTextArea, "Sonarqube current measures saved to $fileName")
     return fileName
 }
 
@@ -194,7 +197,7 @@ private fun saveCurrentMeasuresAndIssues(projectKeys: List<String>, metricKeys: 
         val csvWriter = CSVWriter(fw)
         csvWriter.writeAll(rows.map { it.toTypedArray() })
     }
-    println("Measures and issues saved to $fileName")
+    logger.info(logTextArea, "Measures and issues saved to $fileName")
 }
 
 /**
@@ -242,7 +245,7 @@ fun saveMeasureHistory(project: SonarProject): String {
         val csvWriter = CSVWriter(fw)
         csvWriter.writeAll(rows.map { it.toTypedArray() })
     }
-    println("Sonarqube measure history saved to $fileName")
+    logger.info(logTextArea, "Sonarqube measure history saved to $fileName")
     return fileName
 }
 
@@ -274,7 +277,7 @@ private fun getNonemptyMetricKeys(projectKey: String): List<String> {
             }
         }
     }
-    println("Nonempty are ${usefulMeasures.size} sonarqube measures: $usefulMeasures")
+    logger.info(logTextArea, "Nonempty are ${usefulMeasures.size} sonarqube measures: $usefulMeasures")
     return usefulMeasures
 }
 
@@ -289,7 +292,7 @@ private fun getMetricKeys(): List<String> {
     val metricsKeys = mutableListOf<String>()
     val metricsArray = metricsObject["metrics"] as JSONArray
     metricsArray.filterIsInstance<JSONObject>().mapTo(metricsKeys) { it["key"].toString() }
-    println("Found $metricsCount sonarqube measures: $metricsKeys")
+    logger.info(logTextArea, "Found $metricsCount sonarqube measures: $metricsKeys")
     if (metricsKeys.size != metricsCount)
         throw Exception("Saved ${metricsKeys.size} measure keys, but there are $metricsCount found")
     return metricsKeys
@@ -299,7 +302,7 @@ private fun getMetricKeys(): List<String> {
  * Saves issue history for a project in a .csv file.
  */
 fun saveIssuesOld(fileName: String, componentKey: String, statuses: String, ruleKeys: List<String>) {
-    println("Extracting issues for " + componentKey)
+    logger.info(logTextArea, "Extracting issues for " + componentKey)
     val startTime = System.currentTimeMillis()
 
     val header = arrayOf("creation-date", "update-date", "rule", "component", "effort")
@@ -311,7 +314,7 @@ fun saveIssuesOld(fileName: String, componentKey: String, statuses: String, rule
         csvWriter.writeNext(header)
         csvWriter.writeAll(rows.sortedBy { it[0] }) // sorted by "creation-date"
     }
-    println("Sonarqube issues saved to $fileName, extraction took ${(System.currentTimeMillis()-startTime)/1000.0} seconds")
+    logger.info(logTextArea, "Sonarqube issues saved to $fileName, extraction took ${(System.currentTimeMillis()-startTime)/1000.0} seconds")
 }
 
 
@@ -319,7 +322,7 @@ fun saveIssuesOld(fileName: String, componentKey: String, statuses: String, rule
  * Saves Sonarqube project's issue history in a .csv file. Returns the name of the file.
  */
 fun saveIssues(project: SonarProject, statuses: String): String {
-    println("Extracting issues for ${project.getName()}")
+    logger.info(logTextArea, "Extracting issues for ${project.getName()}")
     val startTime = System.currentTimeMillis()
 
     val header = arrayOf("creation-date", "update-date", "rule", "component", "effort")
@@ -332,7 +335,7 @@ fun saveIssues(project: SonarProject, statuses: String): String {
         csvWriter.writeNext(header)
         csvWriter.writeAll(rows.sortedBy { it[0] }) // sorted by "creation-date"
     }
-    println("Sonarqube issues saved to $fileName, extraction took ${(System.currentTimeMillis()-startTime)/1000.0} seconds")
+    logger.info(logTextArea, "Sonarqube issues saved to $fileName, extraction took ${(System.currentTimeMillis()-startTime)/1000.0} seconds")
     return fileName
 }
 
@@ -398,7 +401,7 @@ private fun saveIssuesAt(dateFilter: String, componentKey: String, statuses: Str
                 "&ps=$pageSize" +
                 "&p=$page"
         if (page * pageSize > MAX_ELASTICSEARCH_RESULTS) {
-            println("WARNING: only ${MAX_ELASTICSEARCH_RESULTS} returned for $issuesQuery")
+            logger.info(logTextArea, "WARNING: only ${MAX_ELASTICSEARCH_RESULTS} returned for $issuesQuery")
             break
         }
         val sonarResult = getStringFromUrl(issuesQuery)
@@ -478,7 +481,7 @@ private fun splitIntoBatches(list: List<String>, batchSize: Int): List<List<Stri
  * Get a list of rule keys for java language
  */
 fun getRuleKeys(sonarInstance: String): List<String> {
-    println("Requesting rule keys for java")
+    logger.info(logTextArea, "Requesting rule keys for java")
     val result = mutableListOf<String>()
     val pageSize = 500
     var page = 0
@@ -505,7 +508,7 @@ Parses an URL request as a string
 fun getStringFromUrl(queryURL: String): String {
     if (queryURL.length > MAX_URL_LENGTH)
         throw Exception("URLs longer than ${MAX_URL_LENGTH} are not supported by most systems")
-    println("Sending 'GET' request to URL: " + queryURL)
+    logger.info(logTextArea, "Sending 'GET' request to URL: " + queryURL)
     val url = URL(queryURL)
     val con = url.openConnection() as HttpURLConnection
     con.requestMethod = "GET"

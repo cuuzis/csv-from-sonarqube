@@ -96,7 +96,6 @@ fun saveJiraIssues(sonarProject: SonarProject): String {
     FileWriter(fileName).use { fw ->
         val csvWriter = CSVWriter(fw)
         csvWriter.writeAll(rows2.map { it.toTypedArray() })
-        println("Jira issue data saved to $fileName")
     }
     return fileName
 }

@@ -1,4 +1,6 @@
 import com.opencsv.CSVWriter
+import gui.logTextArea
+import gui.logger
 import java.io.File
 import org.eclipse.jgit.api.Git
 import org.eclipse.jgit.errors.MissingObjectException
@@ -15,7 +17,7 @@ private val emptyTreeHash = "4b825dc642cb6eb9a060e54bf8d69288fbee4904"
  * Saves git commits for a project in a csv file
  */
 fun saveGitCommits(sonarProject: SonarProject): String {
-    println("Saving git commits")
+    logger.info(logTextArea, "Saving git commits")
     val header = listOf(
             "git-date-original",
             "git-date-sonarqube",
@@ -67,14 +69,14 @@ fun saveGitCommits(sonarProject: SonarProject): String {
     FileWriter(fileName).use { fw ->
         val csvWriter = CSVWriter(fw)
         csvWriter.writeAll(rows.map { it.toTypedArray() })
-        println("Git commit data saved to $fileName")
+        logger.info(logTextArea, "Git commit data saved to $fileName")
     }
 
     // delete temp folder
     if (localPath.deleteRecursively())
-        println("Deleted '$localPath' successfully")
+        logger.info(logTextArea, "Deleted '$localPath' successfully")
     else
-        println("Could not delete '$localPath'")
+        logger.error(logTextArea, "Could not delete '$localPath'")
 
     return fileName
 }
@@ -107,12 +109,12 @@ fun getFilesDiff(oldHash: String, newHash: String, git: Git): List<String> {
 
 fun cloneRemoteRepository(repositoryURL: String, directory: File): Git {
     try {
-        println("Cloning repository from $repositoryURL ..")
+        logger.info(logTextArea, "Cloning repository from $repositoryURL ..")
         val result: Git = Git.cloneRepository()
                 .setURI(repositoryURL)
                 .setDirectory(directory)
                 .call()
-        println("Git repository cloned into '${result.repository.directory.parent}'")
+        logger.info(logTextArea, "Git repository cloned into '${result.repository.directory.parent}'")
         return result
     } catch (e: Exception) {
         throw Exception("Could not clone the remote repository", e)

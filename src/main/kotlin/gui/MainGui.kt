@@ -1,5 +1,7 @@
 package gui
 
+import error
+import info
 import javafx.application.Application
 import javafx.scene.Scene
 import javafx.stage.Stage
@@ -8,6 +10,7 @@ import javafx.scene.control.*
 import javafx.scene.control.ProgressBar
 import javafx.scene.layout.*
 import javafx.scene.paint.Color
+import org.slf4j.LoggerFactory
 
 
 private var currentTask: Task<Any>? = null
@@ -15,7 +18,8 @@ private val taskProgressBar = ProgressBar(0.0)
 private val taskStopButton = Button("Stop")
 private val taskStatusLabel = Label("")
 
-private val logTextArea = TextArea()
+val logTextArea = TextArea()
+val logger = LoggerFactory.getLogger(MainGui::class.java)!!
 
 /**
  * GUI main view
@@ -50,7 +54,6 @@ class MainGui : Application() {
 
     private fun addStatusBar(rows: VBox) {
         taskStopButton.setOnAction {
-            println("Task stopped")
             currentTask?.cancel()
         }
         taskStopButton.isDisable = true
@@ -93,29 +96,28 @@ abstract class GuiTask() : Task<Any>() {
 
     override fun done() {
         super.done()
-        println("${this.javaClass.simpleName} done")
+        logger.info(logTextArea, "${this.javaClass.simpleName} done")
         taskStopButton.isDisable = true
         updateProgress(0,1)
         currentTask = null
     }
 
     override fun cancelled() {
-        updateMessage("${this.javaClass.simpleName} cancelled")
+        logger.info(logTextArea,"${this.javaClass.simpleName} cancelled")
     }
 
     override fun succeeded() {
-        println("${this.javaClass.simpleName} succeeded")
+        logger.info(logTextArea, "${this.javaClass.simpleName} succeeded")
     }
 
     override fun failed() {
         updateMessage("${this.javaClass.simpleName} failed: $exception")
-        System.err.println("${this.javaClass.simpleName} failed with the following exception:")
-        exception.printStackTrace(System.err)
+        val message = "${this.javaClass.simpleName} failed with the following exception:"
+        logger.error(logTextArea, message, exception)
     }
 
-    override fun updateMessage(message: String?) {
+    override fun updateMessage(message: String) {
         super.updateMessage(message)
-        logTextArea.appendText(message + System.lineSeparator())
-        println(message)
+        logger.info(logTextArea, message)
     }
 }
