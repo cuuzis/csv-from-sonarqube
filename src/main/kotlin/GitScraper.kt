@@ -1,6 +1,6 @@
 import com.opencsv.CSVWriter
-import gui.logTextArea
-import gui.logger
+import gui.MainGui.Companion.logTextArea
+import gui.MainGui.Companion.logger
 import java.io.File
 import org.eclipse.jgit.api.Git
 import org.eclipse.jgit.errors.MissingObjectException

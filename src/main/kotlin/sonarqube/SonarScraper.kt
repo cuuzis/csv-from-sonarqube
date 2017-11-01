@@ -3,8 +3,8 @@ package sonarqube
 import com.opencsv.CSVWriter
 import com.opencsv.bean.CsvToBeanBuilder
 import csv_model.extracted.SonarIssues
-import gui.logTextArea
-import gui.logger
+import gui.MainGui.Companion.logTextArea
+import gui.MainGui.Companion.logger
 import info
 import org.json.simple.JSONArray
 import org.json.simple.JSONObject
