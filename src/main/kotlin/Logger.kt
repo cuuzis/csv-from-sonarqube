@@ -2,12 +2,23 @@ import javafx.scene.control.TextArea
 import org.slf4j.Logger
 import java.io.PrintWriter
 import java.io.StringWriter
+import java.time.Instant
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
+import java.time.format.FormatStyle
+import java.util.*
+
+private val dateTimeFormatter =
+        DateTimeFormatter.ofLocalizedDateTime(FormatStyle.MEDIUM)
+                .withLocale(Locale.UK)
+                .withZone(ZoneId.systemDefault())
 
 /**
  * Extension function that appends error message to log TextArea
  */
 fun Logger.error(logTextArea: TextArea, message: String, exception: Throwable) {
-    logTextArea.appendText(message + System.lineSeparator() + exception.getStackTraceString())
+    val timeStamp = dateTimeFormatter.format(Instant.now())
+    logTextArea.appendText("[$timeStamp] $message" + System.lineSeparator() + exception.getStackTraceString())
     error(message, exception)
 }
 
@@ -15,7 +26,8 @@ fun Logger.error(logTextArea: TextArea, message: String, exception: Throwable) {
  * Extension function that appends error message to log TextArea
  */
 fun Logger.error(logTextArea: TextArea, message: String) {
-    logTextArea.appendText(message + System.lineSeparator())
+    val timeStamp = dateTimeFormatter.format(Instant.now())
+    logTextArea.appendText("[$timeStamp] $message" + System.lineSeparator())
     error(message)
 }
 
@@ -23,7 +35,8 @@ fun Logger.error(logTextArea: TextArea, message: String) {
  * Extension function that appends info message to log TextArea
  */
 fun Logger.info(logTextArea: TextArea, message: String) {
-    logTextArea.appendText(message + System.lineSeparator())
+    val timeStamp = dateTimeFormatter.format(Instant.now())
+    logTextArea.appendText("[$timeStamp] $message" + System.lineSeparator())
     info(message)
 }
 
