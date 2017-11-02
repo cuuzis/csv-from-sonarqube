@@ -25,6 +25,7 @@ class SonarqubeTab(private val mainGui: MainGui) : Tab("Sonarqube") {
     private val serverTextField = TextField()
     private val saveCommitsButton = Button("Save git commits")
     private val saveFaultsButton = Button("Save jira faults")
+    private val saveMappingButton = Button("Save fault mapping")
 
     init {
         val rows = VBox()
@@ -84,6 +85,7 @@ class SonarqubeTab(private val mainGui: MainGui) : Tab("Sonarqube") {
         tableProjects.selectionModel.selectedItems.addListener { _: ListChangeListener.Change<*> ->
             saveCommitsButton.isDisable = tableProjects.selectionModel.selectedItems.any { it.getGitLink() == "" }
             saveFaultsButton.isDisable = tableProjects.selectionModel.selectedItems.any { it.getJiraLink() == "" }
+            saveMappingButton.isDisable = tableProjects.selectionModel.selectedItems.any { !it.isDataExtracted() }
         }
 
         val projectsRow = HBoxRow(labelProjects, tableProjects)
@@ -155,7 +157,15 @@ class SonarqubeTab(private val mainGui: MainGui) : Tab("Sonarqube") {
             }
         }
 
-        val exportRow = HBoxRow(saveCommitsButton, saveFaultsButton)
+        saveMappingButton.isDisable = true
+        saveMappingButton.setOnAction {
+            val selectedProjects = tableProjects.selectionModel.selectedItems
+            selectedProjects.forEach {
+                TODO("mainGui.runGuiTask(SaveMappingTask(it))")
+            }
+        }
+
+        val exportRow = HBoxRow(saveCommitsButton, saveFaultsButton, saveMappingButton)
         rows.children.add(exportRow)
     }
 

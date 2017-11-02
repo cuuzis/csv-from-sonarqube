@@ -78,4 +78,20 @@ class SonarProject constructor(val sonarServer: SonarServer, key: String, name: 
         }
         return folder.name
     }
+
+    /**
+     * Returns true if the necessary data to map faults, files and issues is extracted
+     */
+    fun isDataExtracted(): Boolean {
+        if (!File(getKeyAsFolderName() + File.separatorChar + "git-commits.csv").exists()) {
+            return false
+        }
+        if (!File(getKeyAsFolderName() + File.separatorChar + "jira-faults.csv").exists()) {
+            return false
+        }
+        if (!File(getKeyAsFolderName() + File.separatorChar + "sonar-issues.csv").exists()) {
+            return false
+        }
+        return true
+    }
 }

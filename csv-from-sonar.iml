@@ -31,6 +31,7 @@
       <excludeFolder url="file://$MODULE_DIR$/agrishop-2" />
       <excludeFolder url="file://$MODULE_DIR$/architecture-smells-arcan" />
       <excludeFolder url="file://$MODULE_DIR$/binaries" />
+      <excludeFolder url="file://$MODULE_DIR$/cli" />
       <excludeFolder url="file://$MODULE_DIR$/extraction" />
       <excludeFolder url="file://$MODULE_DIR$/extraction-2" />
       <excludeFolder url="file://$MODULE_DIR$/org-apache-bcel" />
