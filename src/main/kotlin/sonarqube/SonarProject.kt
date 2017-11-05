@@ -92,6 +92,9 @@ class SonarProject constructor(val sonarServer: SonarServer, key: String, name: 
         if (!File(getKeyAsFolderName() + File.separatorChar + "sonar-issues.csv").exists()) {
             return false
         }
+        if (!File(getKeyAsFolderName() + File.separatorChar + "measure-history.csv").exists()) {
+            return false
+        }
         return true
     }
 }

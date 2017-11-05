@@ -30,6 +30,8 @@
       <excludeFolder url="file://$MODULE_DIR$/ApplesTest2" />
       <excludeFolder url="file://$MODULE_DIR$/agrishop-2" />
       <excludeFolder url="file://$MODULE_DIR$/architecture-smells-arcan" />
+      <excludeFolder url="file://$MODULE_DIR$/bcel" />
+      <excludeFolder url="file://$MODULE_DIR$/bcel - Copy" />
       <excludeFolder url="file://$MODULE_DIR$/binaries" />
       <excludeFolder url="file://$MODULE_DIR$/cli" />
       <excludeFolder url="file://$MODULE_DIR$/extraction" />

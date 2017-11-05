@@ -6,6 +6,8 @@ import csv_model.extracted.GitCommits
 import csv_model.extracted.JiraFaults
 import csv_model.merged.MergedIssues
 import csv_model.extracted.SonarIssues
+import gui.MainGui.Companion.logger
+import sonarqube.SonarProject
 import java.io.*
 import java.time.OffsetDateTime
 import java.time.temporal.ChronoUnit
@@ -322,7 +324,7 @@ fun readListFromFile(filename: String): List<String> {
 /**
  * For each fault: finds commits that were fixing it and the changed .java files with their measures
  */
-fun mapFaultFileCommit(issueFile: String, faultFile: String, commitFile: String, measureFile: String, outFile: String, groupByDay: Boolean) {
+fun mapFaultFileCommitOld(issueFile: String, faultFile: String, commitFile: String, measureFile: String, outFile: String, groupByDay: Boolean) {
     println("Mapping faults, commits, sonar-issues to files")
     val commitBeans = CsvToBeanBuilder<GitCommits>(FileReader(File(commitFile)))
             .withType(GitCommits::class.java).build().parse()
@@ -333,7 +335,7 @@ fun mapFaultFileCommit(issueFile: String, faultFile: String, commitFile: String,
     val issueBeans = CsvToBeanBuilder<SonarIssues>(FileReader(File(issueFile)))
             .withType(SonarIssues::class.java).build().parse()
             .map { it as SonarIssues }
-            //.filterNot { it.ruleKey == "squid:S00117" }
+    //.filterNot { it.ruleKey == "squid:S00117" }
 
     val summary = mutableMapOf<String, String>()
     summary.put("total-commits", commitBeans.size.toString())
@@ -368,8 +370,8 @@ fun mapFaultFileCommit(issueFile: String, faultFile: String, commitFile: String,
                                 creationDate = if (it.creationDate.orEmpty() != "")
                                     OffsetDateTime.parse(it.creationDate.orEmpty()).toInstant()
                                             .truncatedTo(ChronoUnit.DAYS).toString()
-                                    else
-                                        "",
+                                else
+                                    "",
                                 updateDate = if (it.updateDate.orEmpty() != "")
                                     OffsetDateTime.parse(it.updateDate.orEmpty()).toInstant()
                                             .truncatedTo(ChronoUnit.DAYS).toString()
@@ -414,6 +416,83 @@ fun mapFaultFileCommit(issueFile: String, faultFile: String, commitFile: String,
     summary.put("analysis-last-date", issueBeans.maxBy { it.creationDate.orEmpty() }!!.creationDate!!)
 
     groupByFile(header.toTypedArray(), rows, outFile, summary)
+}
+
+/**
+ * For each fault: finds commits that were fixing it and the changed .java files with their measures
+ */
+fun mapFaultFileCommit(sonarProject: SonarProject): String {
+    val issueFile = sonarProject.getProjectFolder() + File.separatorChar + "sonar-issues.csv"
+    val faultFile = sonarProject.getProjectFolder() + File.separatorChar + "jira-faults.csv"
+    val commitFile = sonarProject.getProjectFolder() + File.separatorChar + "git-commits.csv"
+    val measureFile = sonarProject.getProjectFolder() + File.separatorChar + "measure-history.csv"
+    val outFile =  sonarProject.getProjectFolder() + File.separatorChar + "fault-file-commit.csv"
+    logger.info("Mapping faults, commits, sonar-issues to files")
+    val commitBeans = CsvToBeanBuilder<GitCommits>(FileReader(File(commitFile)))
+            .withType(GitCommits::class.java).build().parse()
+            .map { it as GitCommits }
+    val faultBeans = CsvToBeanBuilder<JiraFaults>(FileReader(File(faultFile)))
+            .withType(JiraFaults::class.java).build().parse()
+            .map { it as JiraFaults }
+    val issueBeans = CsvToBeanBuilder<SonarIssues>(FileReader(File(issueFile)))
+            .withType(SonarIssues::class.java).build().parse()
+            .map { it as SonarIssues }
+    //.filterNot { it.ruleKey == "squid:S00117" }
+
+    val summary = mutableMapOf<String, String>()
+    summary.put("total-commits", commitBeans.size.toString())
+    summary.put("total-faults", faultBeans.size.toString())
+    summary.put("total-sonar-issues", issueBeans.size.toString())
+
+    val issueRuleKeys = sortedSetOf<String>()
+    issueBeans.mapTo(issueRuleKeys) { it.ruleKey.orEmpty() }
+    val header = mutableListOf<String>("jira-key","git-hash","git-sonar-date","sonar-component","sonar-debt")
+    for (ruleKey in issueRuleKeys) {
+        header.add(ruleKey + "-closed")
+        header.add(ruleKey + "-opened")
+        header.add(ruleKey)
+    }
+    val rows = mutableListOf<Array<String>>()
+    for (fault in faultBeans) {
+        val commits = getRelatedCommits(fault, commitBeans)
+        for (commit in commits) {
+            val changedFiles = commit.getChangedFilesList().filter { it.endsWith(".java") }
+            for (file in changedFiles) {
+                val issues = issueBeans.filter { it.component == file }
+                val issuesOpenedAt = issues.filter { it.creationDate.orEmpty() == commit.sonarDate.orEmpty() }
+                val issuesClosedAt = issues.filter { it.updateDate.orEmpty() == commit.sonarDate.orEmpty() }
+                val issuesActiveAt = issues.filter { it.creationDate.orEmpty() <= commit.sonarDate.orEmpty()
+                        && (it.updateDate.orEmpty().isEmpty() || it.updateDate.orEmpty() > commit.sonarDate.orEmpty()) }
+                val technicalDebt = issuesActiveAt.sumBy { it.effort!! }
+                val row = mutableListOf<String>(
+                        fault.jiraKey.orEmpty(), commit.hash.orEmpty(), commit.sonarDate.orEmpty(), file, technicalDebt.toString())
+                for (ruleKey in issueRuleKeys) {
+                    val issuesForRuleClosed = issuesClosedAt.count { it.ruleKey.orEmpty() == ruleKey}
+                    val issuesForRuleOpened = issuesOpenedAt.count { it.ruleKey.orEmpty() == ruleKey}
+                    val issuesForRule = issuesActiveAt.count { it.ruleKey.orEmpty() == ruleKey}
+                    row.add(issuesForRuleClosed.toString())
+                    row.add(issuesForRuleOpened.toString())
+                    row.add(issuesForRule.toString())
+                }
+                rows.add(row.toTypedArray())
+            }
+        }
+    }
+    FileWriter(outFile).use { fw ->
+        val csvWriter = CSVWriter(fw)
+        csvWriter.writeNext(header.toTypedArray())
+        csvWriter.writeAll(rows)
+    }
+    println("Mapped faults, commits, issues and files to saved to $outFile")
+
+    summary.put("mapped-commits", rows.distinctBy { it[1] }.count().toString())
+    summary.put("mapped-faults", rows.distinctBy { it[0] }.count().toString() )
+    summary.put("analysis", (readListFromFile(measureFile).size - 1).toString())
+    summary.put("analysis-first-date", issueBeans.minBy { it.creationDate.orEmpty() }!!.creationDate!!)
+    summary.put("analysis-last-date", issueBeans.maxBy { it.creationDate.orEmpty() }!!.creationDate!!)
+
+    groupByFile(header.toTypedArray(), rows, outFile, summary)
+    return outFile
 }
 
 private fun  getRelatedCommits(fault: JiraFaults, commitBeans: List<GitCommits>): List<GitCommits> {

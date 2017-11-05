@@ -10,6 +10,7 @@ import java.net.UnknownHostException
 import javafx.scene.control.cell.PropertyValueFactory
 import javafx.scene.control.cell.TextFieldTableCell
 import javafx.scene.layout.Priority
+import mapFaultFileCommit
 import saveGitCommits
 import saveJiraIssues
 import sonarqube.*
@@ -161,7 +162,7 @@ class SonarqubeTab(private val mainGui: MainGui) : Tab("Sonarqube") {
         saveMappingButton.setOnAction {
             val selectedProjects = tableProjects.selectionModel.selectedItems
             selectedProjects.forEach {
-                TODO("mainGui.runGuiTask(SaveMappingTask(it))")
+                mainGui.runGuiTask(SaveMappingTask(it))
             }
         }
 
@@ -256,6 +257,20 @@ class ExportFaultsTask(private val sonarProject: SonarProject) : GuiTask() {
         updateMessage("Exporting jira faults for ${sonarProject.getName()} (${sonarProject.getKey()})")
         val savedFile = saveJiraIssues(sonarProject)
         updateMessage("Jira faults saved to $savedFile")
+    }
+
+}
+
+/**
+ * Maps commits-fault-file mapping for a project. Requires
+ */
+class SaveMappingTask(private val sonarProject: SonarProject) : GuiTask() {
+
+    override fun call() {
+        super.call()
+        updateMessage("Mapping commits & faults for ${sonarProject.getName()} (${sonarProject.getKey()})")
+        val savedFile = mapFaultFileCommit(sonarProject)
+        updateMessage("Git commits saved to $savedFile")
     }
 
 }

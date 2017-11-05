@@ -257,7 +257,7 @@ return
         //mergeAllToAnalysis(measuresFile, issuesFile, measuresAndIssuesFile)
 
 
-        mapFaultFileCommit(issuesFile, jiraFaultFile, gitCommitFile, measuresFile, faultFileCommitFile, project.dailyAnalysis)
+        mapFaultFileCommitOld(issuesFile, jiraFaultFile, gitCommitFile, measuresFile, faultFileCommitFile, project.dailyAnalysis)
         val rFileList = listOf(
                 "history-correlation-commits.R",
                 "history-correlation-faults.R")
