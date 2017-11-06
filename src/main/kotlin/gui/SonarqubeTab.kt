@@ -12,6 +12,7 @@ import javafx.scene.control.cell.TextFieldTableCell
 import javafx.scene.layout.Priority
 import mapFaultFileCommit
 import saveGitCommits
+import saveHistoryCorrelation
 import saveJiraIssues
 import sonarqube.*
 
@@ -307,8 +308,7 @@ class SaveCorrelationsTask(private val sonarProject: SonarProject) : GuiTask() {
     override fun call() {
         super.call()
         updateMessage("Saving correlations for ${sonarProject.getName()} (${sonarProject.getKey()})")
-        TODO("correlate")
-        val savedFile = saveGitCommits(sonarProject)
+        val savedFile = saveHistoryCorrelation(sonarProject)
         updateMessage("Correlations saved to $savedFile")
     }
 

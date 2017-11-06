@@ -1,6 +1,8 @@
 import com.opencsv.CSVWriter
 import com.opencsv.bean.CsvToBeanBuilder
 import csv_model.merged.Correlations
+import gui.MainGui.Companion.logger
+import sonarqube.SonarProject
 import java.io.File
 import java.io.FileReader
 import java.io.FileWriter
@@ -126,9 +128,10 @@ private fun findUsefulCorrelations(csvFile: String): List<Array<String>> {
  * Runs 'Rscript.exe rFile' in the specified folder
  */
 fun  runRscript(rFile: File, folder: File) {
-    println("Running '${rFile.name}' on " + folder.name.split(File.separatorChar).last())
+    logger.info("Running '${rFile.name}' on " + folder.name.split(File.separatorChar).last())
     val startTime = System.currentTimeMillis()
     val scriptFile = rFile.copyTo(File(folder, rFile.name), overwrite = true)
+    // TODO: change to platform independent call:
     val pb = ProcessBuilder("C:\\Program Files\\R\\R-3.3.3\\bin\\x64\\Rscript.exe", scriptFile.name)
             .directory(folder)
             .redirectErrorStream(true)
@@ -138,6 +141,14 @@ fun  runRscript(rFile: File, folder: File) {
     scriptFile.delete()
     if (returnCode != 0)
         throw Exception("Rscript.exe execution returned $returnCode")
-    println("R script '${rFile.name}' on ${folder.name.split(File.separatorChar).last()}" +
+    logger.info("R script '${rFile.name}' on ${folder.name.split(File.separatorChar).last()}" +
             " done in ${(System.currentTimeMillis() - startTime)/1000.0} seconds")
+}
+
+/**
+ * Saves correlation between fault history and commit history
+ */
+fun saveHistoryCorrelation(sonarProject: SonarProject): String {
+    runRscript(File("history-correlation-commits.R"), File(sonarProject.getProjectFolder()))
+    return "correlation-commits.csv"
 }
