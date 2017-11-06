@@ -97,4 +97,14 @@ class SonarProject constructor(val sonarServer: SonarServer, key: String, name: 
         }
         return true
     }
+
+    /**
+     * Returns true if project has its faults mapped to issues
+     */
+    fun isDataMapped(): Boolean {
+        if (!File(getKeyAsFolderName() + File.separatorChar + "fault-file-commit.csv").exists()) {
+            return false
+        }
+        return true
+    }
 }

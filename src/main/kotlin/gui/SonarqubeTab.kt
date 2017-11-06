@@ -27,6 +27,7 @@ class SonarqubeTab(private val mainGui: MainGui) : Tab("Sonarqube") {
     private val saveCommitsButton = Button("Save git commits")
     private val saveFaultsButton = Button("Save jira faults")
     private val saveMappingButton = Button("Save fault mapping")
+    private val saveCorrelationsButton = Button("Save correlations")
 
     init {
         val rows = VBox()
@@ -87,6 +88,7 @@ class SonarqubeTab(private val mainGui: MainGui) : Tab("Sonarqube") {
             saveCommitsButton.isDisable = tableProjects.selectionModel.selectedItems.any { it.getGitLink() == "" }
             saveFaultsButton.isDisable = tableProjects.selectionModel.selectedItems.any { it.getJiraLink() == "" }
             saveMappingButton.isDisable = tableProjects.selectionModel.selectedItems.any { !it.isDataExtracted() }
+            saveCorrelationsButton.isDisable = tableProjects.selectionModel.selectedItems.any { !it.isDataMapped() }
         }
 
         val projectsRow = HBoxRow(labelProjects, tableProjects)
@@ -166,7 +168,15 @@ class SonarqubeTab(private val mainGui: MainGui) : Tab("Sonarqube") {
             }
         }
 
-        val exportRow = HBoxRow(saveCommitsButton, saveFaultsButton, saveMappingButton)
+        saveCorrelationsButton.isDisable = true
+        saveCorrelationsButton.setOnAction {
+            val selectedProjects = tableProjects.selectionModel.selectedItems
+            selectedProjects.forEach {
+                mainGui.runGuiTask(SaveCorrelationsTask(it))
+            }
+        }
+
+        val exportRow = HBoxRow(saveCommitsButton, saveFaultsButton, saveMappingButton, saveCorrelationsButton)
         rows.children.add(exportRow)
     }
 
@@ -285,6 +295,21 @@ class ExportCommitsTask(private val sonarProject: SonarProject) : GuiTask() {
         updateMessage("Exporting git commits for ${sonarProject.getName()} (${sonarProject.getKey()})")
         val savedFile = saveGitCommits(sonarProject)
         updateMessage("Git commits saved to $savedFile")
+    }
+
+}
+
+/**
+ * Saves correlations for project
+ */
+class SaveCorrelationsTask(private val sonarProject: SonarProject) : GuiTask() {
+
+    override fun call() {
+        super.call()
+        updateMessage("Saving correlations for ${sonarProject.getName()} (${sonarProject.getKey()})")
+        TODO("correlate")
+        val savedFile = saveGitCommits(sonarProject)
+        updateMessage("Correlations saved to $savedFile")
     }
 
 }
