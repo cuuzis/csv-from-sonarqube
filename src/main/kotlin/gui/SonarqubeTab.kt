@@ -1,5 +1,6 @@
 package gui
 
+import groupByFile
 import javafx.collections.ListChangeListener
 import javafx.event.EventHandler
 import javafx.geometry.Orientation
@@ -280,8 +281,10 @@ class SaveMappingTask(private val sonarProject: SonarProject) : GuiTask() {
     override fun call() {
         super.call()
         updateMessage("Mapping commits & faults for ${sonarProject.getName()} (${sonarProject.getKey()})")
-        val savedFile = mapFaultFileCommit(sonarProject)
-        updateMessage("Git commits saved to $savedFile")
+        val groupedByCommits = mapFaultFileCommit(sonarProject)
+        updateMessage("Mapped data grouped by commits saved to $groupedByCommits")
+        val groupedByFiles = groupByFile(sonarProject)
+        updateMessage("Mapped data grouped by files saved to $groupedByFiles")
     }
 
 }
