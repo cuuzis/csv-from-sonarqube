@@ -490,6 +490,7 @@ fun mapFaultFileCommit(sonarProject: SonarProject): String {
     val issueFile = sonarProject.getProjectFolder() + File.separatorChar + "sonar-issues.csv"
     val faultFile = sonarProject.getProjectFolder() + File.separatorChar + "jira-faults.csv"
     val commitFile = sonarProject.getProjectFolder() + File.separatorChar + "git-commits.csv"
+    val measureFile = sonarProject.getProjectFolder() + File.separatorChar + "measure-history.csv"
     val outFile =  sonarProject.getProjectFolder() + File.separatorChar + "fault-file-commit.csv"
     logger.info("Mapping faults, commits, sonar-issues to files")
     val commitBeans = CsvToBeanBuilder<GitCommits>(FileReader(File(commitFile)))
@@ -543,6 +544,19 @@ fun mapFaultFileCommit(sonarProject: SonarProject): String {
         csvWriter.writeAll(rows)
     }
     logger.info("Mapped faults, commits, issues and files to saved to $outFile")
+
+
+    updateSummary(sonarProject, "total-commits", commitBeans.size.toString())
+    updateSummary(sonarProject, "total-faults", faultBeans.size.toString())
+    updateSummary(sonarProject, "total-sonar-issues", issueBeans.size.toString())
+
+    updateSummary(sonarProject, "mapped-commits", rows.distinctBy { it[1] }.count().toString())
+    updateSummary(sonarProject, "mapped-faults", rows.distinctBy { it[0] }.count().toString() )
+    updateSummary(sonarProject, "analysis", (readListFromFile(measureFile).size - 1).toString())
+    //updateSummary(sonarProject, "analysis-with-closed-faults", (readListFromFile(measureFile).size - 1).toString())
+    updateSummary(sonarProject, "analysis-first-date", issueBeans.minBy { it.creationDate.orEmpty() }!!.creationDate!!)
+    updateSummary(sonarProject, "analysis-last-date", issueBeans.maxBy { it.creationDate.orEmpty() }!!.creationDate!!)
+
     return outFile
 }
 
@@ -606,6 +620,7 @@ fun groupByFile(sonarProject: SonarProject): String {
         csvWriter.writeAll(rows)
     }
     logger.info("Grouped faults, commits, issues saved to $fileName")
+    updateSummary(sonarProject, "files-affected", rows.size.toString())
     return fileName
 }
 
@@ -614,6 +629,34 @@ private fun  getRelatedCommits(fault: JiraFaults, commitBeans: List<GitCommits>)
         val commitMessage = it.message.orEmpty().toLowerCase()
         val faultKey = fault.jiraKey.toString().toLowerCase()
         commitMessage.contains("(\\W$faultKey\\W|^$faultKey\\W|\\W$faultKey\$)".toRegex())
+    }
+}
+
+/**
+ * Updates key-value pairs in "summary.csv" for project
+ */
+private fun updateSummary(sonarProject: SonarProject, key: String, value: String) {
+    val summaryFile = sonarProject.getProjectFolder() + File.separatorChar + "summary.csv"
+    val summary = mutableMapOf<String, String>()
+
+    // read previous values
+    if (File(summaryFile).exists()) {
+        val reader = CSVReader(FileReader(summaryFile))
+        val keys = reader.readNext().toList()
+        val values = reader.readNext().toList()
+        keys.withIndex().forEach { (idx, key) ->
+            summary.put(key, values[idx])
+        }
+    }
+
+    // update key-value pairs
+    summary.put(key, value)
+
+    // save values to file
+    FileWriter(summaryFile).use { fw ->
+        val csvWriter = CSVWriter(fw)
+        csvWriter.writeNext(summary.keys.toTypedArray())
+        csvWriter.writeNext(summary.values.toTypedArray())
     }
 }
 
