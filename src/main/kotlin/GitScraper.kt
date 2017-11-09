@@ -31,7 +31,7 @@ fun saveGitCommits(sonarProject: SonarProject): String {
     rows.add(header)
 
     // clone repository into temp folder and access data
-    val fileName = sonarProject.getProjectFolder() + File.separatorChar + "git-commits.csv"
+    val fileName = sonarProject.getProjectFolder() + "git-commits.csv"
     val checkoutFolder = fileName.removeSuffix(fileName.split(File.separatorChar).last())
     val localPath = File(checkoutFolder + "tmpGitRepo")
     val git = cloneRemoteRepository(sonarProject.getGitLink(), localPath)

@@ -109,7 +109,7 @@ fun saveMeasures(project: SonarProject): String {
     val measureMapOrdered = measureMap.toSortedMap()
     val header = measureMapOrdered.keys
     val row = measureMapOrdered.values
-    val fileName = project.getProjectFolder() + File.separatorChar + "current-measures.csv"
+    val fileName = project.getProjectFolder() + "current-measures.csv"
     FileWriter(fileName).use { fw ->
         val csvWriter = CSVWriter(fw)
         csvWriter.writeNext(header.toTypedArray())
@@ -240,7 +240,7 @@ fun saveMeasureHistory(project: SonarProject): String {
     for ((key, values) in measureMap) {
         rows.add((listOf(key) + values))
     }
-    val fileName = project.getProjectFolder() + File.separatorChar + "measure-history.csv"
+    val fileName = project.getProjectFolder() + "measure-history.csv"
     FileWriter(fileName).use { fw ->
         val csvWriter = CSVWriter(fw)
         csvWriter.writeAll(rows.map { it.toTypedArray() })
@@ -329,7 +329,7 @@ fun saveIssues(project: SonarProject, statuses: String): String {
     val rows = mutableListOf<Array<String>>()
     saveIssuesForKeys(project.sonarServer.getRuleKeys(), project.getKey(), statuses, rows)
 
-    val fileName = project.getProjectFolder() + File.separatorChar + "current-issues.csv"
+    val fileName = project.getProjectFolder() + "current-issues.csv"
     FileWriter(fileName).use { fw ->
         val csvWriter = CSVWriter(fw)
         csvWriter.writeNext(header)

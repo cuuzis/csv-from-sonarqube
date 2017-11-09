@@ -92,7 +92,7 @@ fun saveJiraIssues(sonarProject: SonarProject): String {
     val rows2 = listOf(header) + rows.subList(1, rows.size).map { it + openIssuesAtKey[it[0]].toString() + closedIssuesAtKey[it[0]].toString() }
 
     // save data to file
-    val fileName = sonarProject.getProjectFolder() + File.separatorChar + "jira-faults.csv"
+    val fileName = sonarProject.getProjectFolder() + "jira-faults.csv"
     FileWriter(fileName).use { fw ->
         val csvWriter = CSVWriter(fw)
         csvWriter.writeAll(rows2.map { it.toTypedArray() })

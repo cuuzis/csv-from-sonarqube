@@ -15,6 +15,7 @@ import mapFaultFileCommit
 import saveGitCommits
 import saveHistoryCorrelation
 import saveJiraIssues
+import saveSummary
 import sonarqube.*
 
 
@@ -28,8 +29,9 @@ class SonarqubeTab(private val mainGui: MainGui) : Tab("Sonarqube") {
     private val serverTextField = TextField()
     private val saveCommitsButton = Button("Save git commits")
     private val saveFaultsButton = Button("Save jira faults")
-    private val saveMappingButton = Button("Save fault mapping")
-    private val saveCorrelationsButton = Button("Save correlations")
+    private val saveMappingButton = Button("Map faults & commits")
+    private val saveCorrelationsButton = Button("Calculate correlations")
+    private val saveSummaryButton = Button("Get summary")
 
     init {
         val rows = VBox()
@@ -91,6 +93,7 @@ class SonarqubeTab(private val mainGui: MainGui) : Tab("Sonarqube") {
             saveFaultsButton.isDisable = tableProjects.selectionModel.selectedItems.any { it.getJiraLink() == "" }
             saveMappingButton.isDisable = tableProjects.selectionModel.selectedItems.any { !it.isDataExtracted() }
             saveCorrelationsButton.isDisable = tableProjects.selectionModel.selectedItems.any { !it.isDataMapped() }
+            saveSummaryButton.isDisable = tableProjects.selectionModel.selectedItems.any { !it.isDataMapped() }
         }
 
         val projectsRow = HBoxRow(labelProjects, tableProjects)
@@ -178,7 +181,13 @@ class SonarqubeTab(private val mainGui: MainGui) : Tab("Sonarqube") {
             }
         }
 
-        val exportRow = HBoxRow(saveCommitsButton, saveFaultsButton, saveMappingButton, saveCorrelationsButton)
+        saveSummaryButton.isDisable = true
+        saveSummaryButton.setOnAction {
+            val selectedProjects = tableProjects.selectionModel.selectedItems
+            mainGui.runGuiTask(SaveSummaryTask(selectedProjects))
+        }
+
+        val exportRow = HBoxRow(saveCommitsButton, saveFaultsButton, saveMappingButton, saveCorrelationsButton, saveSummaryButton)
         rows.children.add(exportRow)
     }
 
@@ -312,6 +321,20 @@ class SaveCorrelationsTask(private val sonarProject: SonarProject) : GuiTask() {
         super.call()
         updateMessage("Saving correlations for ${sonarProject.getName()} (${sonarProject.getKey()})")
         val savedFile = saveHistoryCorrelation(sonarProject)
+        updateMessage("Correlations saved to $savedFile")
+    }
+
+}
+
+/**
+ * Saves correlations for project
+ */
+class SaveSummaryTask(private val sonarProjects: List<SonarProject>) : GuiTask() {
+
+    override fun call() {
+        super.call()
+        updateMessage("Saving summary for ${sonarProjects.size} projects")
+        val savedFile = saveSummary(sonarProjects)
         updateMessage("Correlations saved to $savedFile")
     }
 

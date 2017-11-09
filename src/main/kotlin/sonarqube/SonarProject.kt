@@ -76,7 +76,7 @@ class SonarProject constructor(val sonarServer: SonarServer, key: String, name: 
         if (!folder.exists()) {
             folder.mkdir()
         }
-        return folder.name
+        return folder.name + File.separatorChar
     }
 
     /**

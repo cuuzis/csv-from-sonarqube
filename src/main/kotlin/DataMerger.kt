@@ -487,11 +487,11 @@ private fun groupByFileOld(inputHeader: Array<String>, inputRows: MutableList<Ar
  * For each fault: finds commits that were fixing it and the changed .java files with their measures
  */
 fun mapFaultFileCommit(sonarProject: SonarProject): String {
-    val issueFile = sonarProject.getProjectFolder() + File.separatorChar + "sonar-issues.csv"
-    val faultFile = sonarProject.getProjectFolder() + File.separatorChar + "jira-faults.csv"
-    val commitFile = sonarProject.getProjectFolder() + File.separatorChar + "git-commits.csv"
-    val measureFile = sonarProject.getProjectFolder() + File.separatorChar + "measure-history.csv"
-    val outFile =  sonarProject.getProjectFolder() + File.separatorChar + "fault-file-commit.csv"
+    val issueFile = sonarProject.getProjectFolder() + "sonar-issues.csv"
+    val faultFile = sonarProject.getProjectFolder() + "jira-faults.csv"
+    val commitFile = sonarProject.getProjectFolder() + "git-commits.csv"
+    val measureFile = sonarProject.getProjectFolder() + "measure-history.csv"
+    val outFile =  sonarProject.getProjectFolder() + "fault-file-commit.csv"
     logger.info("Mapping faults, commits, sonar-issues to files")
     val commitBeans = CsvToBeanBuilder<GitCommits>(FileReader(File(commitFile)))
             .withType(GitCommits::class.java).build().parse()
@@ -565,7 +565,7 @@ fun mapFaultFileCommit(sonarProject: SonarProject): String {
  */
 fun groupByFile(sonarProject: SonarProject): String {
 
-    val faultFileCommitFile = sonarProject.getProjectFolder() + File.separatorChar + "fault-file-commit.csv"
+    val faultFileCommitFile = sonarProject.getProjectFolder() + "fault-file-commit.csv"
     val reader = CSVReader(FileReader(faultFileCommitFile))
     val inputHeader = reader.readNext()
     val inputRows = reader.readAll()
@@ -613,7 +613,7 @@ fun groupByFile(sonarProject: SonarProject): String {
         rows.add(row.toTypedArray())
     }
 
-    val fileName =  sonarProject.getProjectFolder() + File.separatorChar + "fault-file-commit-grouped.csv"
+    val fileName =  sonarProject.getProjectFolder() + "fault-file-commit-grouped.csv"
     FileWriter(fileName).use { fw ->
         val csvWriter = CSVWriter(fw)
         csvWriter.writeNext(header.toTypedArray())
@@ -636,7 +636,7 @@ private fun  getRelatedCommits(fault: JiraFaults, commitBeans: List<GitCommits>)
  * Updates key-value pairs in "summary.csv" for project
  */
 private fun updateSummary(sonarProject: SonarProject, key: String, value: String) {
-    val summaryFile = sonarProject.getProjectFolder() + File.separatorChar + "summary.csv"
+    val summaryFile = sonarProject.getProjectFolder() + "summary.csv"
     val summary = mutableMapOf<String, String>()
 
     // read previous values
@@ -659,6 +659,54 @@ private fun updateSummary(sonarProject: SonarProject, key: String, value: String
         csvWriter.writeNext(summary.values.toTypedArray())
     }
 }
+
+/**
+ * Merges together extracted csv files for projects.
+ */
+fun mergeProjectFiles(sonarProjects: List<SonarProject>, csvFilename: String) {
+    logger.info("Merging $csvFilename")
+    // extract all column names occurring in files
+    val columnNames = mutableSetOf<String>("project")
+    for (project in sonarProjects) {
+        val reader = CSVReader(FileReader(project.getProjectFolder() + csvFilename))
+        val header = reader.readNext()
+        columnNames.addAll(header)
+    }
+    val result = mutableListOf<Array<String>>()
+    result.add(columnNames.toTypedArray())
+    for (project in sonarProjects) {
+        // map column indexes
+        val reader = CSVReader(FileReader(project.getProjectFolder() + csvFilename))
+        val header = reader.readNext()
+        val mappedPositions = mutableMapOf<Int,Int>()
+        for ((index, column) in header.withIndex())
+            mappedPositions.put(index, columnNames.indexOf(column))
+        // save mapped values, put "0" if column does not exist
+        val csvRows: List<Array<String>> = reader.readAll()
+        for (csvRow in csvRows) {
+            val row = Array<String>(columnNames.size, { _ -> "0"})
+            row[0] = project.getKey()
+            for ((index, value) in csvRow.withIndex())
+                row[mappedPositions[index]!!] = value
+            result.add(row)
+        }
+    }
+    // save data to file
+    FileWriter(csvFilename).use { fw ->
+        val csvWriter = CSVWriter(fw)
+        csvWriter.writeAll(result)
+    }
+}
+
+/**
+ * Saves summary for selected projects in "summary.csv"
+ */
+fun saveSummary(sonarProjects: List<SonarProject>): String {
+    val fileName = "summary.csv"
+    mergeProjectFiles(sonarProjects, fileName)
+    return fileName
+}
+
 
 private data class Aggregations(
         val sum: Map<String, Int>,
