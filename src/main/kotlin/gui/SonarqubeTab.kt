@@ -20,6 +20,7 @@ import sonarqube.*
 
 
 private val tableProjects = TableView<SonarProject>()
+private val rScriptTextField = TextField("C:\\Program Files\\R\\R-3.3.3\\bin\\x64\\Rscript.exe")
 
 /**
  * GUI Sonarqube issue/measure extraction
@@ -189,6 +190,12 @@ class SonarqubeTab(private val mainGui: MainGui) : Tab("Sonarqube") {
 
         val exportRow = HBoxRow(saveCommitsButton, saveFaultsButton, saveMappingButton, saveCorrelationsButton, saveSummaryButton)
         rows.children.add(exportRow)
+
+        // configuration for RScript
+        val rscriptLocationLabel = Label("Rscript location (for correlations):")
+        val configRow = HBoxRow(rscriptLocationLabel, rScriptTextField)
+        HBox.setHgrow(rScriptTextField, Priority.SOMETIMES)
+        rows.children.add(configRow)
     }
 
     private fun alertNoProjectSelected() {
@@ -320,7 +327,7 @@ class SaveCorrelationsTask(private val sonarProject: SonarProject) : GuiTask() {
     override fun call() {
         super.call()
         updateMessage("Saving correlations for ${sonarProject.getName()} (${sonarProject.getKey()})")
-        val savedFile = saveHistoryCorrelation(sonarProject)
+        val savedFile = saveHistoryCorrelation(sonarProject, rScriptTextField.text)
         updateMessage("Correlations saved to $savedFile")
     }
 
