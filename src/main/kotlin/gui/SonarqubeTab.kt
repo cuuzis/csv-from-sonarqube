@@ -17,10 +17,14 @@ import saveHistoryCorrelation
 import saveJiraIssues
 import saveSummary
 import sonarqube.*
+import java.util.prefs.Preferences
 
+private val prefs = Preferences.userRoot().node("Sonarqube-csv-extractor-prefs")
+private val prefsRScript = "rscript-directory"
+private val prefsSonarServer = "sonarqube-server"
 
 private val tableProjects = TableView<SonarProject>()
-private val rScriptTextField = TextField("C:\\Program Files\\R\\R-3.3.3\\bin\\x64\\Rscript.exe")
+private val rScriptTextField = TextField(prefs.get(prefsRScript,"C:\\Program Files\\R\\R-3.3.3\\bin\\x64\\Rscript.exe"))
 
 /**
  * GUI Sonarqube issue/measure extraction
@@ -50,9 +54,10 @@ class SonarqubeTab(private val mainGui: MainGui) : Tab("Sonarqube") {
     private fun addServerRow(rows: VBox) {
         val labelServer = Label("Sonarqube server:")
         serverTextField.textProperty().addListener({ _, _, newServerString ->
+            prefs.put(prefsSonarServer, newServerString)
             mainGui.runGuiTask(GetProjectListTask(newServerString))
         })
-        serverTextField.textProperty().set("http://sonar.inf.unibz.it")
+        serverTextField.textProperty().set(prefs.get(prefsSonarServer, "http://sonar.inf.unibz.it"))
         val serverRow = HBoxRow(labelServer, serverTextField)
         HBox.setHgrow(serverTextField, Priority.SOMETIMES)
         rows.children.add(serverRow)
@@ -192,8 +197,11 @@ class SonarqubeTab(private val mainGui: MainGui) : Tab("Sonarqube") {
         rows.children.add(exportRow)
 
         // configuration for RScript
-        val rscriptLocationLabel = Label("Rscript location (for correlations):")
-        val configRow = HBoxRow(rscriptLocationLabel, rScriptTextField)
+        val rScriptLocationLabel = Label("Rscript location (for correlations):")
+        rScriptTextField.textProperty().addListener({ _, _, newRScriptDirectory ->
+            prefs.put(prefsRScript, newRScriptDirectory)
+        })
+        val configRow = HBoxRow(rScriptLocationLabel, rScriptTextField)
         HBox.setHgrow(rScriptTextField, Priority.SOMETIMES)
         rows.children.add(configRow)
     }
