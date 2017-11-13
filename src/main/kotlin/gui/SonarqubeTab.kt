@@ -18,6 +18,8 @@ import saveJiraIssues
 import saveSummary
 import sonarqube.*
 import java.util.prefs.Preferences
+import javafx.stage.FileChooser
+
 
 private val prefs = Preferences.userRoot().node("Sonarqube-csv-extractor-prefs")
 private val prefsRScript = "rscript-directory"
@@ -201,7 +203,16 @@ class SonarqubeTab(private val mainGui: MainGui) : Tab("Sonarqube") {
         rScriptTextField.textProperty().addListener({ _, _, newRScriptDirectory ->
             prefs.put(prefsRScript, newRScriptDirectory)
         })
-        val configRow = HBoxRow(rScriptLocationLabel, rScriptTextField)
+        val rScriptSelectButton = Button("Select")
+        rScriptSelectButton.setOnAction {
+            val fileChooser = FileChooser()
+            fileChooser.title = "Select rscript executable"
+            val file = fileChooser.showOpenDialog(mainGui.stage)
+            if (file != null) {
+                rScriptTextField.textProperty().set(file.path)
+            }
+        }
+        val configRow = HBoxRow(rScriptLocationLabel, rScriptTextField, rScriptSelectButton)
         HBox.setHgrow(rScriptTextField, Priority.SOMETIMES)
         rows.children.add(configRow)
     }

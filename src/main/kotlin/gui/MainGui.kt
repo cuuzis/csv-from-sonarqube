@@ -17,8 +17,9 @@ import org.slf4j.LoggerFactory
  */
 class MainGui : Application() {
 
-    companion object {
+    var stage: Stage? = null
 
+    companion object {
         var currentTask: Task<Any>? = null
         val taskProgressBar = ProgressBar(0.0)
         val taskStopButton = Button("Stop")
@@ -43,6 +44,7 @@ class MainGui : Application() {
         primaryStage.title = "Sonarqube issue extractor"
         primaryStage.scene = Scene(rows, 1000.0, 700.0)
         primaryStage.show()
+        stage = primaryStage
     }
 
     private fun addMainContent(rows: VBox) {
