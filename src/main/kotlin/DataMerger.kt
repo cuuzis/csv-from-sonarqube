@@ -68,6 +68,9 @@ fun mapFaultFileCommit(sonarProject: SonarProject): String {
         header.add(ruleKey + "-closed")
         header.add(ruleKey + "-opened")
         header.add(ruleKey)
+        header.add(ruleKey + "-debt-closed")
+        header.add(ruleKey + "-debt-opened")
+        header.add(ruleKey + "-debt")
     }
     val rows = mutableListOf<Array<String>>()
     for (fault in faultBeans) {
@@ -84,12 +87,18 @@ fun mapFaultFileCommit(sonarProject: SonarProject): String {
                 val row = mutableListOf<String>(
                         fault.jiraKey.orEmpty(), commit.hash.orEmpty(), commit.sonarDate.orEmpty(), file, technicalDebt.toString())
                 for (ruleKey in issueRuleKeys) {
-                    val issuesForRuleClosed = issuesClosedAt.count { it.ruleKey.orEmpty() == ruleKey}
-                    val issuesForRuleOpened = issuesOpenedAt.count { it.ruleKey.orEmpty() == ruleKey}
-                    val issuesForRule = issuesActiveAt.count { it.ruleKey.orEmpty() == ruleKey}
-                    row.add(issuesForRuleClosed.toString())
-                    row.add(issuesForRuleOpened.toString())
-                    row.add(issuesForRule.toString())
+                    val issuesForRuleClosed = issuesClosedAt.filter { it.ruleKey.orEmpty() == ruleKey}
+                    val issuesForRuleOpened = issuesOpenedAt.filter { it.ruleKey.orEmpty() == ruleKey}
+                    val issuesForRule = issuesActiveAt.filter { it.ruleKey.orEmpty() == ruleKey}
+                    val effortForRuleClosed = issuesForRuleClosed.sumBy { it.effort!! }
+                    val effortForRuleOpened = issuesForRuleOpened.sumBy { it.effort!! }
+                    val effortForRule = issuesForRule.sumBy { it.effort!! }
+                    row.add(issuesForRuleClosed.count().toString())
+                    row.add(issuesForRuleOpened.count().toString())
+                    row.add(issuesForRule.count().toString())
+                    row.add(effortForRuleClosed.toString())
+                    row.add(effortForRuleOpened.toString())
+                    row.add(effortForRule.toString())
                 }
                 rows.add(row.toTypedArray())
             }
