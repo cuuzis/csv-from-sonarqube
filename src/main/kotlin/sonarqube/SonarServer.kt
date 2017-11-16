@@ -14,7 +14,7 @@ class SonarServer(val serverAddress: String) {
      */
     fun getRuleKeys(): List<String> {
         if (ruleKeys.isEmpty()) {
-            ruleKeys.addAll(sonarqube.getRuleKeys(serverAddress))
+            ruleKeys.addAll(sonarqube.getRuleKeys(serverAddress,"&f=lang&languages=java"))
         }
         return ruleKeys
     }

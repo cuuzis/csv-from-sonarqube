@@ -478,10 +478,10 @@ private fun splitIntoBatches(list: List<String>, batchSize: Int): List<List<Stri
 }
 
 /**
- * Get a list of rule keys for java language
+ * Get a list of rule keys
  */
-fun getRuleKeys(sonarInstance: String): List<String> {
-    logger.info(logTextArea, "Requesting rule keys for java")
+fun getRuleKeys(sonarInstance: String, params: String = ""): List<String> {
+    logger.info(logTextArea, "Requesting rule keys")
     val result = mutableListOf<String>()
     val pageSize = 500
     var page = 0
@@ -490,8 +490,7 @@ fun getRuleKeys(sonarInstance: String): List<String> {
         val query = "$sonarInstance/api/rules/search" +
                 "?ps=$pageSize" +
                 "&p=$page" +
-                "&f=lang" +
-                "&languages=java"//"&languages=web"
+                params
         val response = getStringFromUrl(query)
         val mainObject = parser.parse(response) as JSONObject
         val ruleArray = mainObject["rules"] as JSONArray
@@ -500,6 +499,18 @@ fun getRuleKeys(sonarInstance: String): List<String> {
         val lastItem = page * pageSize
     } while (Integer.parseInt(mainObject["total"].toString()) > lastItem)
     return result
+}
+
+/**
+ * Get a list of tags on SQ instance
+ */
+fun getTags(sonarInstance: String): List<String> {
+    logger.info(logTextArea, "Requesting tags")
+    val query = "$sonarInstance/api/rules/tags"
+    val response = getStringFromUrl(query)
+    val mainObject = parser.parse(response) as JSONObject
+    val tagArray = mainObject["tags"] as JSONArray
+    return tagArray.map { it.toString() }
 }
 
 /*

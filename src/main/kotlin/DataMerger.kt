@@ -6,6 +6,8 @@ import csv_model.extracted.JiraFaults
 import csv_model.extracted.SonarIssues
 import gui.MainGui.Companion.logger
 import sonarqube.SonarProject
+import sonarqube.getRuleKeys
+import sonarqube.getTags
 import java.io.*
 
 /**
@@ -59,7 +61,40 @@ fun mapFaultFileCommit(sonarProject: SonarProject): String {
     val issueBeans = CsvToBeanBuilder<SonarIssues>(FileReader(File(issueFile)))
             .withType(SonarIssues::class.java).build().parse()
             .map { it as SonarIssues }
-    //.filterNot { it.ruleKey == "squid:S00117" }
+
+    // group by tags
+    val builtInTags = listOf<String>(
+            "brain-overload",  // there is too much to keep in your head at one time
+            "bad-practice", // the code likely works as designed, but the way it was designed is widely recognized as being a bad idea.
+            // bug - something is wrong and it will probably affect production
+            "cert", // relates to a rule in a CERT standard. There are currently three CERT standards: C, C++, and Java. Many of these rules are not language-specific, but are good programming practices. That's why you'll see this tag on non-C/C++, Java rules.
+            "clumsy", // extra steps are used to accomplish something that could be done more clearly and concisely. (E.G. calling .toString() on a String).
+            "confusing", // will take maintainers longer to understand than is really justified by what the code actually does
+            "convention", // coding convention - typically formatting, naming, whitespace...
+            "cwe", // relates to a rule in the Common Weakness Enumeration. For more on CWE in SonarQube language plugins, and on security-related rules in general, see Security-related rules.
+            "design", // there is something questionable about the design of the code
+            "lock-in", //environment-specific features are used
+            "misra", // relates to a rule in one of the MISRA standards.
+            "pitfall", // nothing is wrong yet, but something could go wrong in the future; a trap has been set for the next guy, & he'll probably fall into it and screw up the code.
+            // security - relates to the security of an application.
+            "suspicious", // it's not guaranteed that this is a bug, but it looks suspiciously like one. At the very least, the code should be re-examined & likely refactored for clarity.
+            "unpredictable", // the code may work fine under current conditions, but may fail erratically if conditions change.
+            "unused", // unused code, E.G. a private variable that is never used.
+            "user-experience", // there's nothing technically wrong with your code, but it may make some or all of your users hate you.
+
+            // multiple tags start with these:
+            "owasp", // relates to a rule in the OWASP Top Ten security standards.
+            "sans-top25" // relates to the SANS Top 25 Coding Errors, which are security-related. Note that the SANS Top 25 list is pulled directly from the CWE.
+    )
+    val serverTags = getTags(sonarProject.sonarServer.serverAddress)
+    val tagRules = mutableMapOf<String,List<String>>()
+    for (builtInTag in builtInTags) {
+        val subTags = serverTags.filter {
+            it == builtInTag || (it.startsWith(builtInTag) && (builtInTag == "owasp" || builtInTag == "sans-top25"))
+        }.joinToString(",")
+        val rulesForTag = getRuleKeys(sonarProject.sonarServer.serverAddress, "&tags=$subTags")
+        tagRules.put(builtInTag, rulesForTag)
+    }
 
     val issueRuleKeys = sortedSetOf<String>()
     issueBeans.mapTo(issueRuleKeys) { it.ruleKey.orEmpty() }
@@ -71,6 +106,15 @@ fun mapFaultFileCommit(sonarProject: SonarProject): String {
         header.add(ruleKey + "-debt-closed")
         header.add(ruleKey + "-debt-opened")
         header.add(ruleKey + "-debt")
+    }
+    //group by tags
+    for (tag in builtInTags) {
+        header.add(tag + "-closed")
+        header.add(tag + "-opened")
+        header.add(tag)
+        header.add(tag + "-debt-closed")
+        header.add(tag + "-debt-opened")
+        header.add(tag + "-debt")
     }
     val rows = mutableListOf<Array<String>>()
     for (fault in faultBeans) {
@@ -99,6 +143,21 @@ fun mapFaultFileCommit(sonarProject: SonarProject): String {
                     row.add(effortForRuleClosed.toString())
                     row.add(effortForRuleOpened.toString())
                     row.add(effortForRule.toString())
+                }
+                // group by tags
+                for (tag in builtInTags) {
+                    val issuesForTagClosed = issuesClosedAt.filter { it.ruleKey.orEmpty() in tagRules[tag].orEmpty() }
+                    val issuesForTagOpened = issuesOpenedAt.filter { it.ruleKey.orEmpty() in tagRules[tag].orEmpty() }
+                    val issuesForTag = issuesActiveAt.filter { it.ruleKey.orEmpty() in tagRules[tag].orEmpty() }
+                    val effortForTagClosed = issuesForTagClosed.sumBy { it.effort!! }
+                    val effortForTagOpened = issuesForTagOpened.sumBy { it.effort!! }
+                    val effortForTag = issuesForTag.sumBy { it.effort!! }
+                    row.add(issuesForTagClosed.count().toString())
+                    row.add(issuesForTagOpened.count().toString())
+                    row.add(issuesForTag.count().toString())
+                    row.add(effortForTagClosed.toString())
+                    row.add(effortForTagOpened.toString())
+                    row.add(effortForTag.toString())
                 }
                 rows.add(row.toTypedArray())
             }
