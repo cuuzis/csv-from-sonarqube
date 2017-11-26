@@ -4,11 +4,13 @@ import com.opencsv.bean.CsvToBeanBuilder
 import csv_model.extracted.GitCommits
 import csv_model.extracted.JiraFaults
 import csv_model.extracted.SonarIssues
+import csv_model.merged.Correlations
 import gui.MainGui.Companion.logger
 import sonarqube.SonarProject
 import sonarqube.getRuleKeys
 import sonarqube.getTags
 import java.io.*
+
 
 /**
  * Returns the requested architecture smell file for a project
@@ -323,12 +325,85 @@ fun mergeProjectFiles(sonarProjects: List<SonarProject>, csvFilename: String) {
 }
 
 /**
+ * Filters and counts issue correlations, finding rows with kendallPvalue < 0.05 and kendallCorrelationTau > 0.5
+ */
+private fun saveUsefulCorrelations(project: SonarProject) {
+    val reader = FileReader(project.getProjectFolder() + "correlation-commits.csv")
+    val correlationBeans = CsvToBeanBuilder<Correlations>(reader)
+            .withType(Correlations::class.java).build().parse()
+            .map { it as Correlations }
+
+    val header = arrayOf("measureName","mannWhitneyPvalue","shapiroWilkPvalue","kendallPvalue",
+            "kendallTau","pearsonPvalue","pearsonCor")
+    val result = correlationBeans.filter {
+        it.kendallPvalue?.toDoubleOrNull() != null && it.kendallPvalue.toDouble() < 0.05
+        && it.kendallTau?.toDoubleOrNull() != null && it.kendallTau.toDouble() > 0.5
+    }.map {
+        arrayOf(it.measureName, it.mannWhitneyPvalue, it.shapiroWilkPvalue, it.kendallPvalue,
+                it.kendallTau, it.pearsonPvalue, it.pearsonCor)
+    }
+
+    // save data to file
+    FileWriter(project.getProjectFolder() + "correlation-summary.csv").use { fw ->
+        val csvWriter = CSVWriter(fw)
+        csvWriter.writeNext(header)
+        csvWriter.writeAll(result)
+    }
+}
+
+/**
+ * counts the number of projects with correlations for faults and measures
+ */
+private fun countCorrelations() {
+    val reader = FileReader("correlation-summary.csv")
+    val correlationBeans = CsvToBeanBuilder<Correlations>(reader)
+            .withType(Correlations::class.java).build().parse()
+            .map { it as Correlations }
+    val issueKeys = mutableSetOf<String>()
+    correlationBeans.mapTo(issueKeys) { it.measureName.orEmpty() }
+    val rows = mutableListOf<Array<String>>()
+    for (issue in issueKeys) {
+        val infectedProjects = correlationBeans.filter { it.measureName == issue }
+        val measurableOccurrences = infectedProjects.filter { it.kendallPvalue?.toDoubleOrNull() != null && it.kendallPvalue.toDouble() < 0.05 }
+        val correlation05Occurrences = measurableOccurrences.filter { it.kendallTau?.toDoubleOrNull() != null && it.kendallTau.toDouble() > 0.5 }
+        val correlation06Occurrences = measurableOccurrences.count { it.kendallTau?.toDoubleOrNull() != null && it.kendallTau.toDouble() > 0.6 }
+        rows.add(arrayOf(
+                issue,
+                infectedProjects.count().toString(),
+                measurableOccurrences.count().toString(),
+                correlation05Occurrences.count().toString(),
+                correlation06Occurrences.toString(),
+                correlation05Occurrences.joinToString(";") { it.project.orEmpty() }
+        ))
+    }
+    val header: Array<String> = arrayOf<String>("measure", "#infectedProjects", "#pvalue005", "#correlation05", "#correlation06", "correlation05")
+    val result: List<Array<String>> = rows // sorted by:       correlation06      correlation05      pvalue005          infectedProjects
+            .sortedWith(compareBy({ it[4].toInt() }, { it[3].toInt() }, { it[2].toInt() }, { it[1].toInt() }))
+            .plus(element = header)
+            .reversed()
+
+    // save data to file
+    FileWriter("correlation-count.csv").use { fw ->
+        val csvWriter = CSVWriter(fw)
+        csvWriter.writeAll(result)
+    }
+}
+
+/**
  * Saves summary for selected projects in "summary.csv"
  */
 fun saveSummary(sonarProjects: List<SonarProject>): String {
-    val fileName = "summary.csv"
-    mergeProjectFiles(sonarProjects, fileName)
-    return fileName
+    val projectSummary = "summary.csv"
+    val correlationsSummary = "correlation-commits.csv"
+    val correlationsFiltered = "correlation-summary.csv"
+    for (project in sonarProjects) {
+        saveUsefulCorrelations(project)
+    }
+    mergeProjectFiles(sonarProjects, projectSummary)
+    mergeProjectFiles(sonarProjects, correlationsSummary)
+    mergeProjectFiles(sonarProjects, correlationsFiltered)
+    countCorrelations()
+    return "$projectSummary, $correlationsSummary, $correlationsFiltered"
 }
 
 
