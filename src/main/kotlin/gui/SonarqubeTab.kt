@@ -256,15 +256,15 @@ class GetProjectListTask(private val serverAddress: String) : GuiTask() {
 }
 
 /**
- * Saves current issues for project
+ * Saves issues for project
  */
 class ExportIssuesTask(private val sonarProject: SonarProject) : GuiTask() {
 
     override fun call() {
         super.call()
         updateMessage("Exporting issues for ${sonarProject.getName()} (${sonarProject.getKey()})")
-        val savedFile = saveIssues(sonarProject, "OPEN")
-        updateMessage("Current issues saved to $savedFile")
+        val savedFile = saveIssues(sonarProject, "OPEN,CLOSED")
+        updateMessage("Issues saved to $savedFile")
     }
 }
 

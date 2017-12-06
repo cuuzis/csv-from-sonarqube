@@ -3,6 +3,7 @@ package sonarqube
 import com.opencsv.CSVWriter
 import com.opencsv.bean.CsvToBeanBuilder
 import csv_model.extracted.SonarIssues
+import csv_model.extracted.SonarMeasures
 import gui.MainGui.Companion.logTextArea
 import gui.MainGui.Companion.logger
 import info
@@ -119,87 +120,6 @@ fun saveMeasures(project: SonarProject): String {
     return fileName
 }
 
-/*
-Saves in a .csv file all of the current measures and issues for given projects
- */
-// TODO: split into measures for key only
-private fun saveCurrentMeasuresAndIssues(projectKeys: List<String>, metricKeys: List<String>, ruleKeys: List<String>) {
-    val measureKeys = mutableSetOf<String>()
-    val issueKeys = mutableSetOf<String>()
-    val allProjectMeasures = mutableListOf<Map<String,String>>()
-    val allProjectIssues = mutableListOf<Map<String,Int>>()
-    for (projectKey in projectKeys) {
-        //get measures
-        val measureValues = mutableMapOf<String, String>()
-        val metricKeysLeft = metricKeys.toMutableList()
-        measureKeys.add("_project")
-        measureValues.put("_project", projectKey)
-        val measureQuery = "${sonarInstanceToRemove}/api/measures/component" +
-                "?componentKey=$projectKey" +
-                "&metricKeys="
-        while (!metricKeysLeft.isEmpty()) {
-            var query = measureQuery
-            while (!metricKeysLeft.isEmpty() && (query.length + metricKeysLeft.first().length < MAX_URL_LENGTH)) {
-                if (query == measureQuery)
-                    query += metricKeysLeft.removeAt(0)
-                else
-                    query += "," + metricKeysLeft.removeAt(0)
-            }
-            val measureResult = getStringFromUrl(query)
-            val mainObject = parser.parse(measureResult) as JSONObject
-            val componentObject = mainObject["component"] as JSONObject
-            val measureArray = componentObject["measures"] as JSONArray
-            for (metricObject in measureArray.filterIsInstance<JSONObject>()) {
-                val measureKey = metricObject["metric"].toString()
-                val measureValue = metricObject["value"].toString().replace(",", ";")
-                measureKeys.add(measureKey)
-                measureValues.put(measureKey, measureValue)
-            }
-        }
-        allProjectMeasures.add(measureValues)
-
-        //save issues to file
-        val issuesFolderName = projectKey.replace("\\W".toRegex(),"-")
-        saveIssuesOld("$issuesFolderName/current-issues.csv", projectKey, "OPEN", ruleKeys)
-
-        //read issues from file and count them
-        val issueCount = mutableMapOf<String, Int>()
-        val issueBeans = CsvToBeanBuilder<SonarIssues>(FileReader(File("$issuesFolderName/current-issues.csv")))
-                .withType(SonarIssues::class.java).build().parse()
-                .map { it as SonarIssues }
-        for (issueBean in issueBeans) {
-            val ruleKey = issueBean.ruleKey.orEmpty()
-            issueKeys.add(ruleKey)
-            val previousCount = issueCount.getOrDefault(ruleKey, 0)
-            issueCount[ruleKey] = previousCount + 1
-        }
-        allProjectIssues.add(issueCount)
-    }
-
-    // summary for all projects
-    val fileName = "current-measures-and-issues.csv"
-    //header
-    val sortedMeasureKeys = measureKeys.toSortedSet()
-    val sortedIssueKeys = issueKeys.toSortedSet()
-    val header = sortedMeasureKeys.toList() + sortedIssueKeys.toList()
-    val rows = mutableListOf<List<String>>()
-    rows.add(header)
-
-    //rows
-    for ((idx, measureValues) in allProjectMeasures.withIndex()) {
-        val issueValues = allProjectIssues[idx]
-        val rowMeasures = sortedMeasureKeys.map { measureValues[it] ?: "null" }
-        val rowIssues = sortedIssueKeys.map { issueValues[it] ?: 0 }
-        rows.add(rowMeasures + rowIssues.map { it.toString() })
-    }
-
-    FileWriter(fileName).use { fw ->
-        val csvWriter = CSVWriter(fw)
-        csvWriter.writeAll(rows.map { it.toTypedArray() })
-    }
-    logger.info(logTextArea, "Measures and issues saved to $fileName")
-}
-
 /**
  * Saves past measures for a project in a .csv file
  */
@@ -236,14 +156,27 @@ fun saveMeasureHistory(project: SonarProject): String {
     // save data to file
     val header = listOf<String>("measure-date") + metricKeys
     val rows = mutableListOf<List<String>>()
-    rows.add(header)
     for ((key, values) in measureMap) {
         rows.add((listOf(key) + values))
     }
+
     val fileName = project.getProjectFolder() + "measure-history.csv"
-    FileWriter(fileName).use { fw ->
+
+    // append instead of overwrite
+    val rowsToSave =
+            if (File(fileName).exists()) {
+                val reader = FileReader(fileName)
+                val measuresAlreadySaved = CsvToBeanBuilder<SonarMeasures>(reader)
+                        .withType(SonarMeasures::class.java).build().parse()
+                        .map { (it as SonarMeasures).date }
+                rows.filterNot { measuresAlreadySaved.contains(it[0]) } // it[0] == "measure-date"
+            } else {
+                listOf(header) + rows
+            }
+
+    FileWriter(fileName, true).use { fw ->
         val csvWriter = CSVWriter(fw)
-        csvWriter.writeAll(rows.map { it.toTypedArray() })
+        csvWriter.writeAll(rowsToSave.map { it.toTypedArray() })
     }
     logger.info(logTextArea, "Sonarqube measure history saved to $fileName")
     return fileName
@@ -298,25 +231,6 @@ private fun getMetricKeys(): List<String> {
     return metricsKeys
 }
 
-/**
- * Saves issue history for a project in a .csv file.
- */
-fun saveIssuesOld(fileName: String, componentKey: String, statuses: String, ruleKeys: List<String>) {
-    logger.info(logTextArea, "Extracting issues for " + componentKey)
-    val startTime = System.currentTimeMillis()
-
-    val header = arrayOf("creation-date", "update-date", "rule", "component", "effort")
-    val rows = mutableListOf<Array<String>>()
-    saveIssuesForKeys(ruleKeys, componentKey, statuses, rows)
-
-    FileWriter(fileName).use { fw ->
-        val csvWriter = CSVWriter(fw)
-        csvWriter.writeNext(header)
-        csvWriter.writeAll(rows.sortedBy { it[0] }) // sorted by "creation-date"
-    }
-    logger.info(logTextArea, "Sonarqube issues saved to $fileName, extraction took ${(System.currentTimeMillis()-startTime)/1000.0} seconds")
-}
-
 
 /**
  * Saves Sonarqube project's issue history in a .csv file. Returns the name of the file.
@@ -325,15 +239,28 @@ fun saveIssues(project: SonarProject, statuses: String): String {
     logger.info(logTextArea, "Extracting issues for ${project.getName()}")
     val startTime = System.currentTimeMillis()
 
-    val header = arrayOf("creation-date", "update-date", "rule", "component", "effort")
     val rows = mutableListOf<Array<String>>()
     saveIssuesForKeys(project.sonarServer.getRuleKeys(), project.getKey(), statuses, rows)
 
-    val fileName = project.getProjectFolder() + "current-issues.csv"
-    FileWriter(fileName).use { fw ->
+    val fileName = project.getProjectFolder() + "sonar-issues.csv"
+
+    // append instead of overwrite
+    val rowsToSave: List<Array<String>> =
+            if (File(fileName).exists()) {
+                val reader = FileReader(fileName)
+                val issuesAlreadySaved = CsvToBeanBuilder<SonarIssues>(reader)
+                        .withType(SonarIssues::class.java).build().parse()
+                        .map { (it as SonarIssues).creationDate }
+                rows.filterNot { issuesAlreadySaved.contains(it[0]) } // it[0] == "creation-date"
+                        .sortedBy { it[0] } // sorted by "creation-date"
+            } else {
+                val header = arrayOf("creation-date", "update-date", "rule", "component", "effort")
+                listOf(header) + rows.sortedBy { it[0] } // sorted by "creation-date"
+            }
+
+    FileWriter(fileName, true).use { fw ->
         val csvWriter = CSVWriter(fw)
-        csvWriter.writeNext(header)
-        csvWriter.writeAll(rows.sortedBy { it[0] }) // sorted by "creation-date"
+        csvWriter.writeAll(rowsToSave)
     }
     logger.info(logTextArea, "Sonarqube issues saved to $fileName, extraction took ${(System.currentTimeMillis()-startTime)/1000.0} seconds")
     return fileName
