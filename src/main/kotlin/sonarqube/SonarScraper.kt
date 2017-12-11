@@ -120,37 +120,52 @@ fun saveMeasures(project: SonarProject): String {
  * Saves past measures for a project in a .csv file
  */
 fun saveMeasureHistory(project: SonarProject): String {
-    val metricKeys = getNonemptyMetricKeys(project)
-    val measureMap = sortedMapOf<String, Array<String>>()
-    val pageSize = 500
-    var currentPage = 0
-    do {
-        currentPage++
-        val measureQuery = "${project.sonarServer.serverAddress}/api/measures/search_history" +
-                "?component=${project.getKey()}" +
-                "&ps=$pageSize" +
-                "&p=$currentPage" +
-                "&metrics=" + metricKeys.joinToString(",")
-
-        val measureResult = getStringFromUrl(measureQuery)
-        val mainObject = parser.parse(measureResult) as JSONObject
-        val pagingObject = mainObject["paging"] as JSONObject
-        val measureArray = mainObject["measures"] as JSONArray
-        for (metricObject in measureArray.filterIsInstance<JSONObject>()) {
-            val measureKey = metricObject["metric"].toString()
-            val measureHistory = metricObject["history"] as JSONArray
-            for (measureEntry in measureHistory.filterIsInstance<JSONObject>()) {
-                val date = getInstantFromSonarDate(measureEntry["date"].toString()).toString()
-                val value = measureEntry["value"].toString()
-                measureMap.putIfAbsent(date, Array(metricKeys.size, init = { _ -> "0" }))
-                val valueArray = measureMap[date]
-                valueArray!![metricKeys.indexOf(measureKey)] = value
-            }
+    //split into batches to overcome large URL problems
+    val metricKeysAll = getNonemptyMetricKeys(project)
+    val metricKeyBatches = mutableListOf<MutableList<String>>()
+    var batch = 0
+    for (metricKey in metricKeysAll) {
+        if (metricKeyBatches.getOrNull(batch) == null) {
+            metricKeyBatches.add(batch, mutableListOf())
         }
-    } while (pageSize * currentPage < pagingObject["total"].toString().toInt())
+        metricKeyBatches[batch].add(metricKey)
+        if (metricKeyBatches[batch].joinToString(",").length + 500 > MAX_URL_LENGTH) {
+            batch++
+        }
+    }
+
+    val measureMap = sortedMapOf<String, Array<String>>()
+    for (metricKeys in metricKeyBatches) {
+        val pageSize = 500
+        var currentPage = 0
+        do {
+            currentPage++
+            val measureQuery = "${project.sonarServer.serverAddress}/api/measures/search_history" +
+                    "?component=${project.getKey()}" +
+                    "&ps=$pageSize" +
+                    "&p=$currentPage" +
+                    "&metrics=" + metricKeys.joinToString(",")
+
+            val measureResult = getStringFromUrl(measureQuery)
+            val mainObject = parser.parse(measureResult) as JSONObject
+            val pagingObject = mainObject["paging"] as JSONObject
+            val measureArray = mainObject["measures"] as JSONArray
+            for (metricObject in measureArray.filterIsInstance<JSONObject>()) {
+                val measureKey = metricObject["metric"].toString()
+                val measureHistory = metricObject["history"] as JSONArray
+                for (measureEntry in measureHistory.filterIsInstance<JSONObject>()) {
+                    val date = getInstantFromSonarDate(measureEntry["date"].toString()).toString()
+                    val value = measureEntry["value"].toString()
+                    measureMap.putIfAbsent(date, Array(metricKeys.size, init = { _ -> "0" }))
+                    val valueArray = measureMap[date]
+                    valueArray!![metricKeys.indexOf(measureKey)] = value
+                }
+            }
+        } while (pageSize * currentPage < pagingObject["total"].toString().toInt())
+    }
 
     // save data to file
-    val header = listOf<String>("measure-date") + metricKeys
+    val header = listOf<String>("measure-date") + metricKeysAll
     val rows = mutableListOf<List<String>>()
     for ((key, values) in measureMap) {
         rows.add((listOf(key) + values))
@@ -440,9 +455,10 @@ fun getTags(sonarInstance: String): List<String> {
 Parses an URL request as a string
  */
 fun getStringFromUrl(queryURL: String): String {
-    if (queryURL.length > MAX_URL_LENGTH)
-        throw Exception("URLs longer than ${MAX_URL_LENGTH} are not supported by most systems")
     logger.info(logTextArea, "Sending 'GET' request to URL: " + queryURL)
+    if (queryURL.length > MAX_URL_LENGTH) {
+        throw Exception("URLs longer than $MAX_URL_LENGTH are not supported by most systems")
+    }
     val url = URL(queryURL)
     val con = url.openConnection() as HttpURLConnection
     con.requestMethod = "GET"

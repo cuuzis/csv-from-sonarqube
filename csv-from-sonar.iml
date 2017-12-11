@@ -41,6 +41,9 @@
       <excludeFolder url="file://$MODULE_DIR$/org-apache-beanutils" />
       <excludeFolder url="file://$MODULE_DIR$/org-apache-codec" />
       <excludeFolder url="file://$MODULE_DIR$/org-apache-collections" />
+      <excludeFolder url="file://$MODULE_DIR$/org-apache-gora-gora" />
+      <excludeFolder url="file://$MODULE_DIR$/org-apache-tika-tika" />
+      <excludeFolder url="file://$MODULE_DIR$/org-apache-tika-tika - Copy" />
       <excludeFolder url="file://$MODULE_DIR$/target" />
     </content>
     <orderEntry type="inheritedJdk" />
