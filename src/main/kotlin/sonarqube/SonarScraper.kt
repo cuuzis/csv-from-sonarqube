@@ -23,7 +23,6 @@ import java.io.FileReader
 import java.io.FileWriter
 import java.io.File
 
-var sonarInstanceToRemove = "http://sonar.inf.unibz.it"
 private val parser = JSONParser()
 private val MAX_URL_LENGTH = 2000
 private val MAX_ELASTICSEARCH_RESULTS = 10000
@@ -79,10 +78,10 @@ fun getProjectsOnServer(sonarServer: SonarServer): List<SonarProject> {
  */
 fun saveMeasures(project: SonarProject): String {
     val measureMap = mutableMapOf<String,String>()
-    val measureQuery = "${sonarInstanceToRemove}/api/measures/component" +
+    val measureQuery = "${project.sonarServer.serverAddress}/api/measures/component" +
             "?componentKey=${project.getKey()}" +
             "&metricKeys="
-    val metricKeysLeft = getMetricKeys().toMutableList()
+    val metricKeysLeft = getMetricKeys(project).toMutableList()
     while (!metricKeysLeft.isEmpty()) {
         var query = measureQuery
         while (!metricKeysLeft.isEmpty() && (query.length + metricKeysLeft.first().length < MAX_URL_LENGTH)) {
@@ -121,13 +120,13 @@ fun saveMeasures(project: SonarProject): String {
  * Saves past measures for a project in a .csv file
  */
 fun saveMeasureHistory(project: SonarProject): String {
-    val metricKeys = getNonemptyMetricKeys(project.getKey())
+    val metricKeys = getNonemptyMetricKeys(project)
     val measureMap = sortedMapOf<String, Array<String>>()
     val pageSize = 500
     var currentPage = 0
     do {
         currentPage++
-        val measureQuery = "${sonarInstanceToRemove}/api/measures/search_history" +
+        val measureQuery = "${project.sonarServer.serverAddress}/api/measures/search_history" +
                 "?component=${project.getKey()}" +
                 "&ps=$pageSize" +
                 "&p=$currentPage" +
@@ -182,12 +181,12 @@ fun saveMeasureHistory(project: SonarProject): String {
 /**
  * Tests which past measures contain nonempty values and are therefore useful
  */
-private fun getNonemptyMetricKeys(projectKey: String): List<String> {
+private fun getNonemptyMetricKeys(project: SonarProject): List<String> {
     val usefulMeasures = mutableListOf<String>()
-    val measureQuery = "${sonarInstanceToRemove}/api/measures/search_history" +
-            "?component=$projectKey" +
+    val measureQuery = "${project.sonarServer.serverAddress}/api/measures/search_history" +
+            "?component=${project.getKey()}" +
             "&metrics="
-    val metricKeysLeft = getMetricKeys().toMutableList()
+    val metricKeysLeft = getMetricKeys(project).toMutableList()
     while (!metricKeysLeft.isEmpty()) {
         var query = measureQuery
         while (!metricKeysLeft.isEmpty() && (query.length + metricKeysLeft.first().length < MAX_URL_LENGTH)) {
@@ -214,8 +213,8 @@ private fun getNonemptyMetricKeys(projectKey: String): List<String> {
 /**
  * Returns all measures available on the server
  */
-private fun getMetricKeys(): List<String> {
-    val metricsQuery = "${sonarInstanceToRemove}/api/metrics/search?ps=1000"
+private fun getMetricKeys(project: SonarProject): List<String> {
+    val metricsQuery = "${project.sonarServer.serverAddress}/api/metrics/search?ps=1000"
     val metricsResult = getStringFromUrl(metricsQuery)
     val metricsObject = parser.parse(metricsResult) as JSONObject
     val metricsCount = Integer.parseInt(metricsObject["total"].toString())
@@ -237,7 +236,7 @@ fun saveIssues(project: SonarProject, statuses: String): String {
     val startTime = System.currentTimeMillis()
 
     val rows = mutableListOf<Array<String>>()
-    saveIssuesForKeys(project.sonarServer.getRuleKeys(), project.getKey(), statuses, rows)
+    saveIssuesForKeys(project.sonarServer.getRuleKeys(), project, statuses, rows)
 
     val fileName = project.getProjectFolder() + "sonar-issues.csv"
 
@@ -266,13 +265,13 @@ fun saveIssues(project: SonarProject, statuses: String): String {
 /**
  * Saves issues to rows.
  */
-private fun saveIssuesForKeys(ruleKeys: List<String>, componentKey: String, statuses: String, rows: MutableList<Array<String>>) {
+private fun saveIssuesForKeys(ruleKeys: List<String>, project: SonarProject, statuses: String, rows: MutableList<Array<String>>) {
     for (splitKeys in splitIntoBatches(ruleKeys, 20)) {
         var createdAfter = "&createdAfter=${URLEncoder.encode("1900-01-01T01:01:01+0100", "UTF-8")}"
-        var issuesLeft = issuesAt(createdAfter, componentKey, statuses, splitKeys)
+        var issuesLeft = issuesAt(createdAfter, project, statuses, splitKeys)
         if (Integer.valueOf(issuesLeft["total"].toString()) > MAX_ELASTICSEARCH_RESULTS && ruleKeys.size > 1) { // split by rule keys
             for (splitKeysSmaller in splitIntoBatches(splitKeys, ruleKeys.size / 2)) {
-                saveIssuesForKeys(splitKeysSmaller, componentKey, statuses, rows)
+                saveIssuesForKeys(splitKeysSmaller, project, statuses, rows)
             }
         } else if (Integer.valueOf(issuesLeft["total"].toString()) > 0) {
             while (Integer.valueOf(issuesLeft["total"].toString()) > MAX_ELASTICSEARCH_RESULTS) { // split by dates
@@ -280,13 +279,13 @@ private fun saveIssuesForKeys(ruleKeys: List<String>, componentKey: String, stat
                 val firstIssue = issuesArray.filterIsInstance<JSONObject>().first()
                 val firstIssueDate = firstIssue["creationDate"].toString()
                 val createdAt = "&createdAt=${URLEncoder.encode(firstIssueDate, "UTF-8")}"
-                saveIssuesAt(createdAt, componentKey, statuses, splitKeys, rows)
+                saveIssuesAt(createdAt, project, statuses, splitKeys, rows)
 
                 val nextDate = getSonarDateFromInstant(getInstantFromSonarDate(firstIssueDate).plusSeconds(1))
                 createdAfter = "&createdAfter=${URLEncoder.encode(nextDate, "UTF-8")}"
-                issuesLeft = issuesAt(createdAfter, componentKey, statuses, splitKeys)
+                issuesLeft = issuesAt(createdAfter, project, statuses, splitKeys)
             }
-            saveIssuesAt(createdAfter, componentKey, statuses, splitKeys, rows)
+            saveIssuesAt(createdAfter, project, statuses, splitKeys, rows)
         }
     }
 }
@@ -295,9 +294,9 @@ private fun saveIssuesForKeys(ruleKeys: List<String>, componentKey: String, stat
  * Returns first page of issue object for the specified date filter.
  * Returned object contains total issue count and the earliest issues.
  */
-private fun issuesAt(dateFilter: String, componentKey: String, statuses: String, ruleKeys: List<String>): JSONObject {
-    val issuesQuery = "${sonarInstanceToRemove}/api/issues/search" +
-            "?componentKeys=$componentKey" +
+private fun issuesAt(dateFilter: String, project: SonarProject, statuses: String, ruleKeys: List<String>): JSONObject {
+    val issuesQuery = "${project.sonarServer.serverAddress}/api/issues/search" +
+            "?componentKeys=${project.getKey()}" +
             "&s=CREATION_DATE" +
             "&statuses=$statuses" +
             "&rules=${ruleKeys.joinToString(",")}" +
@@ -311,13 +310,13 @@ private fun issuesAt(dateFilter: String, componentKey: String, statuses: String,
  * Saves to rows all issues created within the specified datetime filter.
  * If project contains more than 10 000 issues with the same key and timestamp, only 10 000 are returned. (sonarqube.MAX_ELASTICSEARCH_RESULTS)
  */
-private fun saveIssuesAt(dateFilter: String, componentKey: String, statuses: String, ruleKeys: List<String>, rows: MutableList<Array<String>>) {
+private fun saveIssuesAt(dateFilter: String, project: SonarProject, statuses: String, ruleKeys: List<String>, rows: MutableList<Array<String>>) {
     val pageSize = 500
     var page = 0
     do {
         page++
-        val issuesQuery = "${sonarInstanceToRemove}/api/issues/search" +
-                "?componentKeys=$componentKey" +
+        val issuesQuery = "${project.sonarServer.serverAddress}/api/issues/search" +
+                "?componentKeys=${project.getKey()}" +
                 "&s=CREATION_DATE" +
                 "&statuses=$statuses" +
                 "&rules=${ruleKeys.joinToString(",")}" +
@@ -331,7 +330,7 @@ private fun saveIssuesAt(dateFilter: String, componentKey: String, statuses: Str
         val sonarResult = getStringFromUrl(issuesQuery)
         val mainObject = parser.parse(sonarResult) as JSONObject
         val totalIssues = Integer.valueOf(mainObject["total"].toString())
-        saveIssuesToRows(mainObject, rows, componentKey)
+        saveIssuesToRows(mainObject, rows, project.getKey())
     } while (page * pageSize < totalIssues)
 }
 

@@ -5,10 +5,6 @@ class SonarServer(val serverAddress: String) {
     val projects = mutableListOf<SonarProject>()
     private val ruleKeys = mutableListOf<String>()
 
-    init {
-        sonarInstanceToRemove = serverAddress
-    }
-
     /**
      * Returns rules available on server for Java
      */
