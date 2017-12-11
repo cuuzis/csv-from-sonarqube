@@ -51,9 +51,8 @@ fun  getInstantFromSonarDate(sonarDate: String): Instant {
 /**
  * Returns a list of projects (key, name) containing a string
  */
-// TODO: refactor return type, name
-fun  getProjectsContainingString(sonarServer: SonarServer, partOfName: String): List<SonarProject> {
-    logger.info(logTextArea, "Requesting projects containing '$partOfName'")
+fun getProjectsOnServer(sonarServer: SonarServer): List<SonarProject> {
+    logger.info(logTextArea, "Requesting projects containing ")
     val projectList = mutableListOf<SonarProject>()
     val pageSize = 500
     var currentPage = 0
@@ -62,9 +61,7 @@ fun  getProjectsContainingString(sonarServer: SonarServer, partOfName: String): 
         val query = "${sonarServer.serverAddress}/api/components/search" +
                 "?qualifiers=TRK" +
                 "&ps=$pageSize" +
-                "&p=$currentPage" +
-                "&q=${URLEncoder.encode(partOfName, "UTF-8")}"
-
+                "&p=$currentPage"
         val response = getStringFromUrl(query)
         val mainObject = parser.parse(response) as JSONObject
         val pagingObject = mainObject["paging"] as JSONObject
@@ -451,9 +448,9 @@ fun getStringFromUrl(queryURL: String): String {
     val con = url.openConnection() as HttpURLConnection
     con.requestMethod = "GET"
     val responseCode = con.responseCode
-    if (responseCode != 200)
+    if (responseCode != 200) {
         throw Exception("Response Code : " + responseCode)
-
+    }
     val `in` = BufferedReader(InputStreamReader(con.inputStream))
     val stringBuilder = StringBuilder()
     do {

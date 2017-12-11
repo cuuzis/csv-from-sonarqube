@@ -235,7 +235,7 @@ class GetProjectListTask(private val serverAddress: String) : GuiTask() {
         val sonarServer = SonarServer(serverAddress)
         try {
             getStringFromUrl(serverAddress)
-            getProjectsContainingString(sonarServer, "")
+            getProjectsOnServer(sonarServer)
             updateMessage("Retrieved ${sonarServer.projects.size} projects from $serverAddress")
         } catch (e: UnknownHostException) {
             if (!isCancelled) {
