@@ -1,6 +1,9 @@
 package sonarqube
 
 import javafx.beans.property.SimpleStringProperty
+import org.json.simple.JSONArray
+import org.json.simple.JSONObject
+import org.json.simple.parser.JSONParser
 import java.io.File
 
 class SonarProject constructor(val sonarServer: SonarServer, key: String, name: String) {
@@ -13,8 +16,9 @@ class SonarProject constructor(val sonarServer: SonarServer, key: String, name: 
     init {
         val storedProjectInfo = getStoredProjectInfo(key)
         if (storedProjectInfo == null) {
-            gitLink = SimpleStringProperty("")
-            jiraLink = SimpleStringProperty("")
+            val (serverGitLink, serverJiraLink) = getProjectLinks()
+            gitLink = SimpleStringProperty(serverGitLink)
+            jiraLink = SimpleStringProperty(serverJiraLink)
         } else {
             gitLink = SimpleStringProperty(storedProjectInfo.gitLink)
             jiraLink = SimpleStringProperty(storedProjectInfo.jiraLink)
@@ -106,5 +110,27 @@ class SonarProject constructor(val sonarServer: SonarServer, key: String, name: 
             return false
         }
         return true
+    }
+
+    /**
+     * Returns issue tracking and source content management links for project
+     */
+    private fun getProjectLinks(): Pair<String, String> {
+        val query = "${sonarServer.serverAddress}/api/project_links/search?" +
+                "projectKey=${getKey()}"
+        val response = getStringFromUrl(query)
+        val mainObject = JSONParser().parse(response) as JSONObject
+        val linkArray = mainObject["links"] as JSONArray
+        var issueLink = ""
+        var scmLink = ""
+        for (link in linkArray.filterIsInstance<JSONObject>()) {
+            if (link["type"] == "issue") {
+                issueLink = link["url"].toString()
+            }
+            if (link["type"] == "scm") {
+                scmLink = link["url"].toString()
+            }
+        }
+        return Pair(scmLink, issueLink)
     }
 }
