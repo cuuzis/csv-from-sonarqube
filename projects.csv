@@ -24,3 +24,5 @@
 "https://github.com/apache/commons-collections.git","https://issues.apache.org/jira/projects/COLLECTIONS","org.apache:collections"
 "https://github.com/apache/gora.git","https://issues.apache.org/jira/projects/GORA","org.apache.gora:gora"
 "https://github.com/apache/tika.git","https://issues.apache.org/jira/projects/TIKA","org.apache.tika:tika"
+"https://github.com/karliszigurs/QuickSearch.git","","com.zigurs.karlis.utils.search:quicksearch"
+"https://git-wip-us.apache.org/repos/asf/commons-scxml.git","https://issues.apache.org/jira/browse/SCXML","org.apache.commons:commons-scxml2"

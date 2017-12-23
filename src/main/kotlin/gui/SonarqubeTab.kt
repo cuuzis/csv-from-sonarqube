@@ -97,6 +97,7 @@ class SonarqubeTab(private val mainGui: MainGui) : Tab("Sonarqube") {
         tableProjects.columnResizePolicy = TableView.CONSTRAINED_RESIZE_POLICY
         tableProjects.selectionModel.selectionMode = SelectionMode.MULTIPLE
         tableProjects.selectionModel.selectedItems.addListener { _: ListChangeListener.Change<*> ->
+            tableProjects.selectionModel.selectedItems.forEach { it.loadServerLinks()  }
             saveCommitsButton.isDisable = tableProjects.selectionModel.selectedItems.any { it.getGitLink() == "" }
             saveFaultsButton.isDisable = tableProjects.selectionModel.selectedItems.any { it.getJiraLink() == "" }
             saveMappingButton.isDisable = tableProjects.selectionModel.selectedItems.any { !it.isDataExtracted() }

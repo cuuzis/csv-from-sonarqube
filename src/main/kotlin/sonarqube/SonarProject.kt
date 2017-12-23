@@ -16,9 +16,8 @@ class SonarProject constructor(val sonarServer: SonarServer, key: String, name: 
     init {
         val storedProjectInfo = getStoredProjectInfo(key)
         if (storedProjectInfo == null) {
-            val (serverGitLink, serverJiraLink) = getProjectLinks()
-            gitLink = SimpleStringProperty(serverGitLink)
-            jiraLink = SimpleStringProperty(serverJiraLink)
+            gitLink = SimpleStringProperty("")
+            jiraLink = SimpleStringProperty("")
         } else {
             gitLink = SimpleStringProperty(storedProjectInfo.gitLink)
             jiraLink = SimpleStringProperty(storedProjectInfo.jiraLink)
@@ -68,7 +67,7 @@ class SonarProject constructor(val sonarServer: SonarServer, key: String, name: 
      * Replaces characters in project key, which are not valid in a directory name
      */
     private fun getKeyAsFolderName(): String {
-        return getKey().replace("\\W".toRegex(),"-")
+        return "extraction" + File.separatorChar + getKey().replace("\\W".toRegex(),"-")
     }
 
     /**
@@ -80,7 +79,7 @@ class SonarProject constructor(val sonarServer: SonarServer, key: String, name: 
         if (!folder.exists()) {
             folder.mkdir()
         }
-        return folder.name + File.separatorChar
+        return folder.path + File.separatorChar
     }
 
     /**
@@ -132,5 +131,17 @@ class SonarProject constructor(val sonarServer: SonarServer, key: String, name: 
             }
         }
         return Pair(scmLink, issueLink)
+    }
+
+    fun loadServerLinks() {
+        if (this.getGitLink() == "" || this.getJiraLink() == "") {
+            val (serverGitLink, serverJiraLink) = getProjectLinks()
+            if (this.getGitLink() == "") {
+                this.gitLink.set(serverGitLink)
+            }
+            if (this.getJiraLink() == "") {
+                this.jiraLink.set(serverJiraLink)
+            }
+        }
     }
 }

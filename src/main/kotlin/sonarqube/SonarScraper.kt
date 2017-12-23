@@ -229,7 +229,7 @@ private fun getNonemptyMetricKeys(project: SonarProject): List<String> {
  * Returns all measures available on the server
  */
 private fun getMetricKeys(project: SonarProject): List<String> {
-    val metricsQuery = "${project.sonarServer.serverAddress}/api/metrics/search?ps=1000"
+    val metricsQuery = "${project.sonarServer.serverAddress}/api/metrics/search?ps=500"
     val metricsResult = getStringFromUrl(metricsQuery)
     val metricsObject = parser.parse(metricsResult) as JSONObject
     val metricsCount = Integer.parseInt(metricsObject["total"].toString())
