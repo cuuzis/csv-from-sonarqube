@@ -6,7 +6,7 @@
 
     <groupId>it.unibz.inf</groupId>
     <artifactId>csv-from-sonar</artifactId>
-    <version>0.1.0</version>
+    <version>0.3.0</version>
 
     <properties>
         <kotlin.version>1.1.51</kotlin.version>
