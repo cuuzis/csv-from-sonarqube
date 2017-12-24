@@ -362,7 +362,7 @@ class SaveSummaryTask(private val sonarProjects: List<SonarProject>) : GuiTask()
         super.call()
         updateMessage("Saving summary for ${sonarProjects.size} projects")
         val savedFile = saveSummary(sonarProjects)
-        updateMessage("Correlations saved to $savedFile")
+        updateMessage("Summary saved to $savedFile")
     }
 
 }

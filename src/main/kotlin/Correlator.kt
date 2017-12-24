@@ -1,32 +1,45 @@
 import gui.MainGui.Companion.logger
 import sonarqube.SonarProject
-import java.io.File
+import java.io.*
+
 
 /**
- * Runs 'Rscript.exe rFile' in the specified folder
+ * Runs 'Rscript.exe history-correlation-commits.R' in the specified folder
  */
-fun  runRscript(executable: String, rFile: File, folder: File) {
-    logger.info("Running '${rFile.name}' on " + folder.name.split(File.separatorChar).last())
+fun  runRscript(executable: String, sonarProject: SonarProject) {
     val startTime = System.currentTimeMillis()
-    val scriptFile = rFile.copyTo(File(folder, rFile.name), overwrite = true)
-    // TODO: change to platform independent call:
+    // copies history-correlation-commits.R script file from resources
+    val scriptName = "history-correlation-commits.R"
+
+    val resourcePath = ".." + File.separatorChar + scriptName
+    val inputStream = sonarProject.javaClass.getResourceAsStream(resourcePath)
+
+    val scriptFile = File(sonarProject.getProjectFolder() + File.separatorChar + scriptName)
+    val outputStream = FileOutputStream(scriptFile)
+
+    val bytes = ByteArray(1024)
+    var read = inputStream.read(bytes)
+    while (read != -1) {
+        outputStream.write(bytes, 0, read)
+        read = inputStream.read(bytes)
+    }
+
+    // executes Rscript
     val pb = ProcessBuilder(executable, scriptFile.name)
-            .directory(folder)
+            .directory(File(sonarProject.getProjectFolder()))
             .redirectErrorStream(true)
-            .inheritIO()
     val process = pb.start()
     val returnCode = process.waitFor()
     scriptFile.delete()
     if (returnCode != 0)
         throw Exception("Rscript execution returned $returnCode")
-    logger.info("R script '${rFile.name}' on ${folder.name.split(File.separatorChar).last()}" +
-            " done in ${(System.currentTimeMillis() - startTime)/1000.0} seconds")
+    logger.info("R script ${scriptFile.name} done in ${(System.currentTimeMillis() - startTime)/1000.0} seconds")
 }
 
 /**
  * Saves correlation between fault history and commit history
  */
 fun saveHistoryCorrelation(sonarProject: SonarProject, rScriptExecutable: String): String {
-    runRscript(rScriptExecutable, File("history-correlation-commits.R"), File(sonarProject.getProjectFolder()))
+    runRscript(rScriptExecutable, sonarProject)
     return "correlation-commits.csv"
 }
