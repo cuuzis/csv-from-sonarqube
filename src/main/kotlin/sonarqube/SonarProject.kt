@@ -92,6 +92,10 @@ class SonarProject constructor(val sonarServer: SonarServer, key: String, name: 
         if (!File(getKeyAsFolderName() + File.separatorChar + "jira-faults.csv").exists()) {
             return false
         }
+        return isSonarDataExtracted()
+    }
+
+    fun isSonarDataExtracted(): Boolean {
         if (!File(getKeyAsFolderName() + File.separatorChar + "sonar-issues.csv").exists()) {
             return false
         }

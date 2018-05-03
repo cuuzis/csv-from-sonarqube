@@ -19,6 +19,7 @@ import saveSummary
 import sonarqube.*
 import java.util.prefs.Preferences
 import javafx.stage.FileChooser
+import mergeMeasuresWithIssues
 
 
 private val prefs = Preferences.userRoot().node("Sonarqube-csv-extractor-prefs")
@@ -36,6 +37,7 @@ class SonarqubeTab(private val mainGui: MainGui) : Tab("Sonarqube") {
     private val serverTextField = TextField()
     private val saveCommitsButton = Button("Save git commits")
     private val saveFaultsButton = Button("Save jira faults")
+    private val saveIssuesAndMeasuresButton = Button("Map issues & measures")
     private val saveMappingButton = Button("Map faults & commits")
     private val saveCorrelationsButton = Button("Calculate correlations")
     private val saveSummaryButton = Button("Get summary")
@@ -100,6 +102,7 @@ class SonarqubeTab(private val mainGui: MainGui) : Tab("Sonarqube") {
             tableProjects.selectionModel.selectedItems.forEach { it.loadServerLinks()  }
             saveCommitsButton.isDisable = tableProjects.selectionModel.selectedItems.any { it.getGitLink() == "" }
             saveFaultsButton.isDisable = tableProjects.selectionModel.selectedItems.any { it.getJiraLink() == "" }
+            saveIssuesAndMeasuresButton.isDisable = tableProjects.selectionModel.selectedItems.any { !it.isSonarDataExtracted() }
             saveMappingButton.isDisable = tableProjects.selectionModel.selectedItems.any { !it.isDataExtracted() }
             saveCorrelationsButton.isDisable = tableProjects.selectionModel.selectedItems.any { !it.isDataMapped() }
             saveSummaryButton.isDisable = tableProjects.selectionModel.selectedItems.any { !it.isDataMapped() }
@@ -174,6 +177,14 @@ class SonarqubeTab(private val mainGui: MainGui) : Tab("Sonarqube") {
             }
         }
 
+        saveIssuesAndMeasuresButton.isDisable = true
+        saveIssuesAndMeasuresButton.setOnAction {
+            val selectedProjects = tableProjects.selectionModel.selectedItems
+            selectedProjects.forEach {
+                mainGui.runGuiTask(SaveMeasureIssueMappingTask(it))
+            }
+        }
+
         saveMappingButton.isDisable = true
         saveMappingButton.setOnAction {
             val selectedProjects = tableProjects.selectionModel.selectedItems
@@ -196,7 +207,7 @@ class SonarqubeTab(private val mainGui: MainGui) : Tab("Sonarqube") {
             mainGui.runGuiTask(SaveSummaryTask(selectedProjects))
         }
 
-        val exportRow = HBoxRow(saveCommitsButton, saveFaultsButton, saveMappingButton, saveCorrelationsButton, saveSummaryButton)
+        val exportRow = HBoxRow(saveCommitsButton, saveFaultsButton, saveIssuesAndMeasuresButton, saveMappingButton, saveCorrelationsButton, saveSummaryButton)
         rows.children.add(exportRow)
 
         // configuration for RScript
@@ -305,6 +316,20 @@ class ExportFaultsTask(private val sonarProject: SonarProject) : GuiTask() {
         updateMessage("Exporting jira faults for ${sonarProject.getName()} (${sonarProject.getKey()})")
         val savedFile = saveJiraIssues(sonarProject)
         updateMessage("Jira faults saved to $savedFile")
+    }
+
+}
+
+/**
+ * Maps commits-fault-file mapping for a project. Requires
+ */
+class SaveMeasureIssueMappingTask(private val sonarProject: SonarProject) : GuiTask() {
+
+    override fun call() {
+        super.call()
+        updateMessage("Mapping measures & issues for ${sonarProject.getName()} (${sonarProject.getKey()})")
+        val measuresAndIssuesFile = mergeMeasuresWithIssues(sonarProject)
+        updateMessage("Mapped measures & issues saved to $measuresAndIssuesFile")
     }
 
 }
