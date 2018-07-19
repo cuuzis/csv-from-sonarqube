@@ -265,7 +265,10 @@ fun saveIssues(project: SonarProject, statuses: String): String {
                 rows.filterNot { issuesAlreadySaved.contains(it[0]) } // it[0] == "creation-date"
                         .sortedBy { it[0] } // sorted by "creation-date"
             } else {
-                val header = arrayOf("creation-date", "update-date", "rule", "component", "effort")
+                val header = arrayOf(
+                "creationDate", "updateDate", "closeDate", "type", "rule", "component", "severity",
+                "project", "startLine", "endLine", "resolution", "status", "message", "effort",
+                "debt", "author")
                 listOf(header) + rows.sortedBy { it[0] } // sorted by "creation-date"
             }
 
@@ -363,17 +366,33 @@ private fun saveIssuesToRows(mainObject: JSONObject, rows: MutableList<Array<Str
                     getInstantFromSonarDate(updateDateSonar).toString()
                 else
                     ""
-        val rule = issueObject["rule"].toString()
-        val component = issueObject["component"].toString()
-        val classname = component.replaceFirst((componentKey + ":").toRegex(), "")
-        val status = issueObject["status"].toString()
-        val effortMinutes = effortToMinutes(issueObject["effort"].toString())
-        val closedDate =
-                if (status == "CLOSED")
-                    updateDate
+        val closeDateSonar = issueObject["closeDate"].toString()
+        val closeDate =
+                if (closeDateSonar != "" && closeDateSonar != "null")
+                    getInstantFromSonarDate(closeDateSonar).toString()
                 else
                     ""
-        rows.add(arrayOf(creationDate, closedDate, rule, classname, effortMinutes))
+        val type = issueObject["type"].toString()
+        val rule = issueObject["rule"].toString()
+        val component = issueObject["component"].toString()
+        val severity = issueObject["severity"].toString()
+        val project = issueObject["project"].toString()
+        var startLine = ""
+        var endLine = ""
+        if (issueObject["textRange"] != null) {
+            val textRange = issueObject["textRange"] as JSONObject
+            startLine = textRange["startLine"].toString()
+            endLine = textRange["endLine"].toString()
+        }
+        val resolution = issueObject["resolution"].toString()
+        val status = issueObject["status"].toString()
+        val message = issueObject["message"].toString()
+        //val effort = issueObject["effort"].toString()
+        val effortMinutes = effortToMinutes(issueObject["effort"].toString())
+        val debt = issueObject["debt"].toString()
+        val author = issueObject["author"].toString()
+        rows.add(arrayOf(creationDate, updateDate, closeDate, type, rule, component, severity, project, startLine,
+                endLine, resolution, status, message, effortMinutes, debt, author))
     }
 }
 
