@@ -25,6 +25,7 @@ import mergeMeasuresWithIssues
 private val prefs = Preferences.userRoot().node("Sonarqube-csv-extractor-prefs")
 private val prefsRScript = "rscript-directory"
 private val prefsSonarServer = "sonarqube-server"
+private val prefsSonarOrganisation = "sonarqube-organization"
 
 private val tableProjects = TableView<SonarProject>()
 private val rScriptTextField = TextField(prefs.get(prefsRScript,"C:\\Program Files\\R\\R-3.3.3\\bin\\x64\\Rscript.exe"))
@@ -35,6 +36,7 @@ private val rScriptTextField = TextField(prefs.get(prefsRScript,"C:\\Program Fil
 class SonarqubeTab(private val mainGui: MainGui) : Tab("Sonarqube") {
 
     private val serverTextField = TextField()
+    private val orgTextField = TextField()
     private val saveCommitsButton = Button("Save git commits")
     private val saveFaultsButton = Button("Save jira faults")
     private val saveIssuesAndMeasuresButton = Button("Map issues & measures")
@@ -45,6 +47,7 @@ class SonarqubeTab(private val mainGui: MainGui) : Tab("Sonarqube") {
     init {
         val rows = VBox()
         addServerRow(rows)
+        addOrgRow(rows)
         addProjectsRow(rows)
         addSeparator(rows, "SonarQube")
         addSonarqubeRow(rows)
@@ -59,12 +62,23 @@ class SonarqubeTab(private val mainGui: MainGui) : Tab("Sonarqube") {
         val labelServer = Label("Sonarqube server:")
         serverTextField.textProperty().addListener({ _, _, newServerString ->
             prefs.put(prefsSonarServer, newServerString)
-            mainGui.runGuiTask(GetProjectListTask(newServerString))
+            mainGui.runGuiTask(GetProjectListTask(newServerString, prefs.get(prefsSonarOrganisation, "")))
         })
-        serverTextField.textProperty().set(prefs.get(prefsSonarServer, "http://sonar.inf.unibz.it"))
+        serverTextField.textProperty().set(prefs.get(prefsSonarServer, ""))
         val serverRow = HBoxRow(labelServer, serverTextField)
         HBox.setHgrow(serverTextField, Priority.SOMETIMES)
         rows.children.add(serverRow)
+    }
+
+    private fun addOrgRow(rows: VBox) {
+        val labelOrg = Label("Sonarqube organization:")
+        orgTextField.textProperty().addListener({ _, _, newOrgString ->
+            prefs.put(prefsSonarOrganisation, newOrgString)
+        })
+        orgTextField.textProperty().set(prefs.get(prefsSonarOrganisation, ""))
+        val orgRow = HBoxRow(labelOrg, orgTextField)
+        HBox.setHgrow(orgTextField, Priority.SOMETIMES)
+        rows.children.add(orgRow)
     }
 
     private fun addProjectsRow(rows: VBox) {
@@ -239,7 +253,7 @@ class SonarqubeTab(private val mainGui: MainGui) : Tab("Sonarqube") {
 /**
  * Queries projects available on Sonarqube server
  */
-class GetProjectListTask(private val serverAddress: String) : GuiTask() {
+class GetProjectListTask(private val serverAddress: String, private val orgName: String) : GuiTask() {
 
     override fun call(): SonarServer {
         super.call()
@@ -247,7 +261,7 @@ class GetProjectListTask(private val serverAddress: String) : GuiTask() {
         val sonarServer = SonarServer(serverAddress)
         try {
             getStringFromUrl(serverAddress)
-            getProjectsOnServer(sonarServer)
+            getProjectsOnServer(sonarServer, orgName)
             updateMessage("Retrieved ${sonarServer.projects.size} projects from $serverAddress")
         } catch (e: UnknownHostException) {
             if (!isCancelled) {
@@ -275,7 +289,7 @@ class ExportIssuesTask(private val sonarProject: SonarProject) : GuiTask() {
     override fun call() {
         super.call()
         updateMessage("Exporting issues for ${sonarProject.getName()} (${sonarProject.getKey()})")
-        val savedFile = saveIssues(sonarProject, "OPEN,CLOSED")
+        val savedFile = saveIssues(sonarProject, "OPEN,CLOSED", prefs.get(prefsSonarOrganisation, ""))
         updateMessage("Issues saved to $savedFile")
     }
 }

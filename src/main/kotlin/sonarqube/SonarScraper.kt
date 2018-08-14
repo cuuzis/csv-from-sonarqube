@@ -50,17 +50,20 @@ fun  getInstantFromSonarDate(sonarDate: String): Instant {
 /**
  * Returns a list of projects (key, name) containing a string
  */
-fun getProjectsOnServer(sonarServer: SonarServer): List<SonarProject> {
+fun getProjectsOnServer(sonarServer: SonarServer, orgName: String): List<SonarProject> {
     logger.info(logTextArea, "Requesting projects containing ")
     val projectList = mutableListOf<SonarProject>()
     val pageSize = 500
     var currentPage = 0
     do {
         currentPage++
-        val query = "${sonarServer.serverAddress}/api/components/search" +
+        var query = "${sonarServer.serverAddress}/api/components/search" +
                 "?qualifiers=TRK" +
                 "&ps=$pageSize" +
                 "&p=$currentPage"
+        if (orgName != "") {
+            query = "$query&organization=$orgName"
+        }
         val response = getStringFromUrl(query)
         val mainObject = parser.parse(response) as JSONObject
         val pagingObject = mainObject["paging"] as JSONObject
@@ -246,12 +249,12 @@ private fun getMetricKeys(project: SonarProject): List<String> {
 /**
  * Saves Sonarqube project's issue history in a .csv file. Returns the name of the file.
  */
-fun saveIssues(project: SonarProject, statuses: String): String {
+fun saveIssues(project: SonarProject, statuses: String, orgName: String): String {
     logger.info(logTextArea, "Extracting issues for ${project.getName()}")
     val startTime = System.currentTimeMillis()
 
     val rows = mutableListOf<Array<String>>()
-    saveIssuesForKeys(project.sonarServer.getRuleKeys(), project, statuses, rows)
+    saveIssuesForKeys(project.sonarServer.getRuleKeys(), project, statuses, rows, orgName)
 
     val fileName = project.getProjectFolder() + "sonar-issues.csv"
 
@@ -283,13 +286,13 @@ fun saveIssues(project: SonarProject, statuses: String): String {
 /**
  * Saves issues to rows.
  */
-private fun saveIssuesForKeys(ruleKeys: List<String>, project: SonarProject, statuses: String, rows: MutableList<Array<String>>) {
+private fun saveIssuesForKeys(ruleKeys: List<String>, project: SonarProject, statuses: String, rows: MutableList<Array<String>>, orgName: String) {
     for (splitKeys in splitIntoBatches(ruleKeys, 20)) {
         var createdAfter = "&createdAfter=${URLEncoder.encode("1900-01-01T01:01:01+0100", "UTF-8")}"
         var issuesLeft = issuesAt(createdAfter, project, statuses, splitKeys)
         if (Integer.valueOf(issuesLeft["total"].toString()) > MAX_ELASTICSEARCH_RESULTS && ruleKeys.size > 1) { // split by rule keys
             for (splitKeysSmaller in splitIntoBatches(splitKeys, ruleKeys.size / 2)) {
-                saveIssuesForKeys(splitKeysSmaller, project, statuses, rows)
+                saveIssuesForKeys(splitKeysSmaller, project, statuses, rows, orgName)
             }
         } else if (Integer.valueOf(issuesLeft["total"].toString()) > 0) {
             while (Integer.valueOf(issuesLeft["total"].toString()) > MAX_ELASTICSEARCH_RESULTS) { // split by dates
@@ -297,13 +300,13 @@ private fun saveIssuesForKeys(ruleKeys: List<String>, project: SonarProject, sta
                 val firstIssue = issuesArray.filterIsInstance<JSONObject>().first()
                 val firstIssueDate = firstIssue["creationDate"].toString()
                 val createdAt = "&createdAt=${URLEncoder.encode(firstIssueDate, "UTF-8")}"
-                saveIssuesAt(createdAt, project, statuses, splitKeys, rows)
+                saveIssuesAt(createdAt, project, statuses, splitKeys, rows, orgName)
 
                 val nextDate = getSonarDateFromInstant(getInstantFromSonarDate(firstIssueDate).plusSeconds(1))
                 createdAfter = "&createdAfter=${URLEncoder.encode(nextDate, "UTF-8")}"
                 issuesLeft = issuesAt(createdAfter, project, statuses, splitKeys)
             }
-            saveIssuesAt(createdAfter, project, statuses, splitKeys, rows)
+            saveIssuesAt(createdAfter, project, statuses, splitKeys, rows, orgName)
         }
     }
 }
@@ -328,12 +331,12 @@ private fun issuesAt(dateFilter: String, project: SonarProject, statuses: String
  * Saves to rows all issues created within the specified datetime filter.
  * If project contains more than 10 000 issues with the same key and timestamp, only 10 000 are returned. (sonarqube.MAX_ELASTICSEARCH_RESULTS)
  */
-private fun saveIssuesAt(dateFilter: String, project: SonarProject, statuses: String, ruleKeys: List<String>, rows: MutableList<Array<String>>) {
+private fun saveIssuesAt(dateFilter: String, project: SonarProject, statuses: String, ruleKeys: List<String>, rows: MutableList<Array<String>>, orgName: String) {
     val pageSize = 500
     var page = 0
     do {
         page++
-        val issuesQuery = "${project.sonarServer.serverAddress}/api/issues/search" +
+        var issuesQuery = "${project.sonarServer.serverAddress}/api/issues/search" +
                 "?componentKeys=${project.getKey()}" +
                 "&s=CREATION_DATE" +
                 "&statuses=$statuses" +
@@ -341,6 +344,9 @@ private fun saveIssuesAt(dateFilter: String, project: SonarProject, statuses: St
                 dateFilter +
                 "&ps=$pageSize" +
                 "&p=$page"
+        if (orgName != "") {
+            issuesQuery += "&organization=$orgName"
+        }
         if (page * pageSize > MAX_ELASTICSEARCH_RESULTS) {
             logger.info(logTextArea, "WARNING: only ${MAX_ELASTICSEARCH_RESULTS} returned for $issuesQuery")
             break
